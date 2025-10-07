@@ -1,3 +1,12 @@
+9.0
+* 优化服务的网络性能
+* MCP 传输协议切换为 streamable-http 并支持通知及进度
+* 代理支持 https 以及 shadowsocks 协议
+* 代理支持代理 IPV6 以及 UDP 协议
+* P2P Bridge 支持（端端互联）
+* 内置分布式任务系统
+* 其他优化以及修复
+
 8.45
 * 更新 frida 版本
 * 其他兼容性修复

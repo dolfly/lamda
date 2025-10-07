@@ -4,13 +4,13 @@
 # See file LICENSE for detail or copy at https://opensource.org/licenses/MIT
 import base64
 
-from lamda.mcp import *
 from lamda.utils import getprop
-from lamda.extensions import *
+from lamda.extensions import BaseMcpExtension
+from lamda.mcp import mcp, Annotated, TextContent, BlobResourceContents
 
 
 class ExampleMcpExtension(BaseMcpExtension):
-    route = "/model-context-protocol/sse/"
+    route = "/model-context-protocol/mcp/"
     name = "example-mcp-extension"
     version = "1.0.0"
     @mcp("tool", description="Send a greeting to others.")

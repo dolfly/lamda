@@ -7,11 +7,15 @@
 # Official FireRPA MCP extension, turning your phone into an AI AGENT
 # ===================================================================
 #
+import json
+import xml.etree.ElementTree as etree
+
 from lamda.mcp import *
 from lamda.client import *
 from lamda.utils import getprop
 from lamda.extensions import BaseMcpExtension, to_json_string
 from google.protobuf.json_format import MessageToDict
+from xmltodict import parse as xml2dict
 
 
 prompt = """
@@ -19,35 +23,11 @@ prompt = """
 
 You are an expert in Android automation, capable of using specialized tools to accurately complete user-requested operations. You understand and can precisely execute each step in the automation process.
 
-## Operation Hierarchy
-1. **Text and Description Matching**: First attempt to match via text or description
-2. **Class Name Matching**: If text matching fails, try using className
-3. **Layout Analysis**: If previous methods fail, examine the layout hierarchy and extract target element information for matching
-
-## Best Practices
-- **Avoid Coordinate-Based Clicks**: Using screenshot coordinates is always the least preferred solution. If necessary, calculate actual coordinates based on screen size scaling
-- **Element Selection Priority**: When parsing layout hierarchies, prioritize extraction of:
-  - text
-  - content-desc
-  - resource-id
-  - class-name
-
-## Text Input Operations
-- Text input may require first clicking the input field to trigger the keyboard
-- Direct text input to parent elements is typically ineffective
-- Prioritize using `set_text` functions
-- Fall back to clipboard copy-paste methods when necessary
-- Ensure correct keycode usage
-
 ## Quality Assurance
-- Perform necessary checks to confirm accurate execution of each step
-- Carefully review each operation
-- Request user intervention for exceptional cases that cannot be handled automatically
-
-## Special Scenarios
-- **Login Requirements**: First try to bypass login by looking for cancel options or back buttons; request user intervention if bypass fails
-- **CAPTCHA/Verification**: Request user intervention for human verification challenges
-- **Ambiguous Instructions**: For brief action descriptions (e.g., "Help me book a flight to San Francisco for tomorrow on Ctrip"), think expansively and determine appropriate entry points and actions based on the device's displayed layout or content
+- Prioritize using layout information for identifying operational elements. You should always use non-repeating criteria for judgment.
+- Resource-id may be duplicated, and duplicate ids should not be used.
+- Each operation should have a certain interval; otherwise, the page may not be fully loaded.
+- Never use screenshot to detect coordinates.
 
 ## Communication
 - Follow the user's language preferences"""
@@ -55,17 +35,13 @@ You are an expert in Android automation, capable of using specialized tools to a
 
 class FireRpaMcpExtension(BaseMcpExtension):
     """Your primary task is to help users automate Android device control using AI through this MCP service."""
-    route = "/firerpa/sse/"
+    route = "/firerpa/mcp/"
     name = "firerpa"
     version = "1.0"
-    @mcp("tool", description="Dumps android window's layout hierarchy as XML string.")
+    @mcp("tool", description="Dumps android window's layout hierarchy as JSON string.")
     def dump_window_hierarchy(self, ctx, compressed: Annotated[bool, "Enables or disables layout hierarchy compression, default true."] = True):
         data = self.device.dump_window_hierarchy(compressed).getvalue()
-        return data.decode("utf-8")
-    @mcp("tool", description="Take a screenshot of current window as JPG.")
-    def take_screenshot(self, ctx, quality: Annotated[int, "Quality of the JPG compression range: 1-100, default 80."] = 80):
-        data = self.device.screenshot(quality).getvalue()
-        return ImageContent(data=data, mimeType="image/jpeg")
+        return self.remove_attrs_and_empty(data)
     @mcp("tool", description="Perform a click at arbitrary coordinates on the display.")
     def click(self, ctx, pointX: Annotated[int, "X coordinate."], pointY: Annotated[int, "Y coordinate."]):
         result = self.device.click(Point(x=pointX, y=pointY))
@@ -153,12 +129,12 @@ class FireRpaMcpExtension(BaseMcpExtension):
     def click_by_description_matches(self, ctx, regex: Annotated[str, "The string matching the element's description."]):
         result = self.device(descriptionMatches=regex).click_exists()
         return str(result).lower()
-    @mcp("tool", description="Use description regex matching to click on an element.")
-    def click_by_resource_id(self, ctx, resource_id: Annotated[str, ""]):
+    @mcp("tool", description="Use resourceId to click on an element, if the resource-id is duplicated, it cannot be used.")
+    def click_by_resource_id(self, ctx, resource_id: Annotated[str, "Elements's resourceId (resourceName)."]):
         result = self.device(resourceId=resource_id).click_exists()
         return str(result).lower()
-    @mcp("tool", description="Use resourceId to input text into an input element.")
-    def set_text_by_resource_id(self, ctx, resource_id: Annotated[str, "Input elements's resourceId (Name)."], text: Annotated[str, "The input text."]):
+    @mcp("tool", description="Use resourceId to input text into an input element, if the resource-id is duplicated, it cannot be used.")
+    def set_text_by_resource_id(self, ctx, resource_id: Annotated[str, "Input elements's resourceId (resourceName)."], text: Annotated[str, "The input text."]):
         result = self.device(resourceId=resource_id).set_text(text)
         return str(result).lower()
     @mcp("tool", description="Use className to input text into an input element.")
@@ -186,7 +162,7 @@ class FireRpaMcpExtension(BaseMcpExtension):
         result = self.device.application(package_name).is_foreground()
         return str(result).lower()
     @mcp("tool", description="Get all manifest permissions of the application using the package name.")
-    def list_application_permissions(self, ctx):
+    def list_application_permissions(self, ctx, package_name: Annotated[str, "The package name, such as com.android.settings."]):
         result = self.device.application(package_name).permissions()
         return to_json_string(result)
     @mcp("tool", description="Grant the application runtime permissions.")
@@ -204,3 +180,22 @@ class FireRpaMcpExtension(BaseMcpExtension):
     @mcp("prompt")
     def agent(self, ctx):
         return PromptMessage(role="user", content=TextContent(text=prompt))
+    def remove_attrs_and_empty(self, xml):
+        """ remove unnecessery node info to reduce token usage """
+        specified_attrs = {"clickable", "scrollable", "checkable", "enabled",
+                        "focusable", "long-clickable", "password", "visible-to-user",
+                        "drawing-order", "hint", "display-id", "package", "focused"}
+        def clean_element(element, parent=None):
+            if element.attrib.get("package") == "com.android.systemui" and parent is not None:
+                parent.remove(element)
+                return True
+            attrs_to_remove = {attr for attr, value in element.attrib.items()
+                            if attr in specified_attrs or not value.strip()}
+            for attr in attrs_to_remove:
+                del element.attrib[attr]
+            for i in range(len(element) - 1, -1, -1):
+                clean_element(element[i], element)
+        root = etree.fromstring(xml)
+        clean_element(root)
+        return json.dumps(xml2dict(etree.tostring(root, encoding="utf-8").decode(),
+                            attr_prefix=""), ensure_ascii=False, separators=(",", ":"))

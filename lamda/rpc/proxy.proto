@@ -7,10 +7,30 @@ package lamda.rpc;
 
 import "application.proto";
 
+// Supported Shadowsocks Ciphers (no ref)
+enum ShadowCipher {
+                SS_AES_128_CFB = 0;
+                SS_AES_192_CFB = 1;
+                SS_AES_256_CFB = 2;
+                SS_AES_128_CTR = 3;
+                SS_AES_192_CTR = 4;
+                SS_AES_256_CTR = 5;
+                SS_CAMELLIA_128_CFB = 6;
+                SS_CAMELLIA_192_CFB = 7;
+                SS_CAMELLIA_256_CFB = 8;
+                SS_DES_CFB = 9;
+                SS_AES_128_GCM = 20;
+                SS_AES_192_GCM = 21;
+                SS_AES_256_GCM = 22;
+                SS_CHACHA20_IETF_POLY1305 = 23;
+}
+
 enum GproxyType {
                 SOCKS5          = 0;
                 HTTP_CONNECT    = 1;
                 HTTP_RELAY      = 2;
+                HTTPS_CONNECT   = 3;
+                SHADOWSOCKS     = 4;
 }
 
 message GproxyConfigRequest {

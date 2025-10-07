@@ -89,6 +89,11 @@ __all__ = [
                 "OpenVPNProfile",
                 "GproxyProfile",
                 "TouchBuilder",
+                "ScriptRuntime",
+                "DataEncode",
+                "AudioStreamType",
+                "PlayAudioProfile",
+                "ApplicationInfo",
                 "Selector",
                 "TouchWait",
                 "TouchMove",
@@ -531,9 +536,10 @@ class ObjectUiAutomatorOpStub:
         return self.stub.selectorObjInfo(req)
     def _new_object(self, **kwargs):
         selector = copy.deepcopy(self._selector)
-        selector.update(**kwargs)
-        instance = self.caller(**selector)
-        return instance
+        child_sibling = selector.get("childOrSiblingSelector")
+        target = child_sibling[-1] if child_sibling else selector
+        target.update(**kwargs)
+        return self.caller(**selector)
     def text(self, txt):
         return self._new_object(text=txt)
     def resourceId(self, name):
