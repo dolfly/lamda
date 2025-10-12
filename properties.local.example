@@ -155,7 +155,7 @@ tunnel2.iface=rmnet
 
 # ---------- mDNS Broadcast Service ----------
 # Enable or disable true | false
-mdns.enable=true
+mdns.enable=false
 # Add TXT metadata for mDNS. When enabled, it will support querying device information
 # such as model, ABI, and device ID using tools like python-zeroconf. Disabled by default.
 mdns.meta=false
