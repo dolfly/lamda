@@ -53,6 +53,7 @@ enhanced-automation=false
 # Remote Desktop Touch Fix
 # If there is an offset or no response when you touch the screen on
 # the remote desktop, please set the following configuration:
+# available options are: system | native (default)
 touch.backend=system
 
 # The switch for get_last_activities, default is false and does not intercept.
