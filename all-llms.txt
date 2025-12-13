@@ -1351,12 +1351,12 @@ Launch with parameters controlling token authentication, bind addresses, allowed
 ranges (10000-15000).
 
 Configuration - properties.local variables:
-frp.enable=true
-frp.server-address=your-server.com
-frp.server-port=6009
-frp.remote-port=12345
-frp.token=your-token
-frp.protocol=tcp
+fwd.enable=true
+fwd.host=your-server.com # server-address
+fwd.port=6009 # server-port
+fwd.rport=12345 # remote-port
+fwd.token=your-token
+fwd.protocol=tcp
 
 Connecting via FRP:
 Device("127.0.0.1", port=12345)
