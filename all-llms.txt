@@ -1,0 +1,1709 @@
+FIRERPA (FIRERPAλ) - COMPLETE DOCUMENTATION
+
+========================================
+TABLE OF CONTENTS
+========================================
+
+1. OVERVIEW
+2. SETUP & INSTALLATION
+   - Requirements
+   - Pre-installation Checklist
+   - Server Installation Methods
+   - Client Installation
+   - Network Configuration
+   - Starting/Stopping/Uninstalling
+3. BASIC USAGE
+   - Preparation for Use
+   - Connecting via Python
+4. REMOTE DESKTOP
+   - Access & Connection
+   - Security Configuration
+   - File Management
+   - Customization Options
+   - Limitations
+5. DEVICE DISCOVERY (mDNS)
+6. SCHEDULED TASKS
+7. BUILT-IN TERMINAL
+8. VIRTUAL DEBIAN ENVIRONMENT
+9. PROGRAMMING INTERFACE (API)
+   - Basic Operations
+   - Device Information
+   - Screen Control
+   - Input Operations
+10. ADVANCED INTERFACE OPERATIONS
+11. IMAGE MATCHING OPERATIONS
+12. TEXT RECOGNITION (OCR)
+13. INTERFACE MONITOR
+14. BUILT-IN FRIDA
+    - Three Usage Methods
+    - Persistent Frida Scripts
+    - Frida Data Reporting
+    - Frida Exported Interfaces (RPC)
+15. BINARY PATCH
+16. BUILT-IN ADB MANAGEMENT
+17. CONNECTIVITY
+    - SSH Connection
+    - File Transfer (SCP)
+18. ONE-CLICK PACKET CAPTURE
+19. ENCRYPTION CERTIFICATES
+20. DISTRIBUTED DEPLOYMENT
+21. DEPLOYING OPENVPN SERVICE
+22. INTERFACE LOCKING
+23. VERSION HISTORY
+
+========================================
+1. OVERVIEW
+========================================
+
+FIRERPAλ is an Android device management and automation system that requires rooted devices.
+It provides:
+- Remote desktop access via browser
+- Comprehensive automation APIs (160+ interfaces)
+- Advanced debugging capabilities
+- Built-in Frida with anti-detection
+- Packet capture and network manipulation
+- Device farm management
+
+ARCHITECTURE:
+- Server component: Runs on rooted Android devices
+- Client library: Python 3.6-3.12
+- Default port: 65000
+- Browser-based remote desktop (Chrome 95+)
+
+PHILOSOPHY:
+The documentation emphasizes sequential reading from first chapter. Users should read
+documentation when encountering issues before seeking community support.
+
+========================================
+2. SETUP & INSTALLATION
+========================================
+
+REQUIREMENTS
+------------
+- Android phone with root privileges
+- Minimum: 2GB+ RAM, 1GB+ available storage
+- Python 3.6-3.12 for client
+- Recommended emulators: NoxPlayer, LDPlayer, AVD
+- Chrome 95+ browser for remote desktop
+
+PRE-INSTALLATION CHECKLIST
+---------------------------
+CRITICAL - Must complete before installation:
+1. Turn off Magisk Hide
+2. Turn off frida-server
+3. Restart the device after confirmation
+4. Disable or uninstall all accessibility services (talkback, autojs, etc.)
+5. Configure timezone and time correctly
+   - Settings > Date and Time
+   - Verify timezone matches location
+   - If automatic fails, set manually
+
+Skipping these steps may cause compatibility issues with FIRERPA interfaces and
+remote desktop functionality.
+
+NETWORK CONFIGURATION
+---------------------
+Real Devices:
+- Ensure computer and phone share the same network
+
+Emulators:
+- Android x86 (VMWare): Set bridge mode in virtual machine settings
+- LDPlayer/NoxPlayer: Install drivers, enable bridge mode, restart
+- Android Studio AVD: Execute `adb forward tcp:65000 tcp:65000`, use localhost to connect
+- WSA (Windows Subsystem Android):
+  * Minimum version: 2210.40000 (rooted)
+  * Settings: Continuous subsystem resources, disable Advanced Networking
+  * Enable Developer Mode and "Support single machine UI automation"
+  * Restart subsystem
+- Redroid (Docker-based Android):
+  * For Ubuntu 20.04:
+    apt install linux-modules-extra-`uname -r`
+  * Edit /etc/modules, add: mac80211_hwsim, binder_linux, ashmem_linux
+  * Restart host machine
+  * Launch container mapping port 65001 to container's 65000
+  * Access via: http://127.0.0.1:65001
+
+Note: Use localhost instead of 127.0.0.1 for tools requiring USB-based detection.
+
+SERVER INSTALLATION METHODS
+----------------------------
+
+METHOD 1: APP Installation (Easiest)
+-------------------------------------
+"This installation method is the easiest and doesn't require you to do any extra operations."
+
+Steps:
+1. Download lamda-autorun.apk from the provided link
+2. Install and grant root privileges within the app
+3. Enable auto-start switch
+4. Add app to auto-start whitelist if device settings restrict auto-launching
+5. Restart the device
+6. Wait 1-2 minutes after restart
+7. Find device's IP address in WIFI settings (example: 192.168.1.8)
+8. Navigate to http://192.168.1.8:65000 in browser to access remote desktop
+
+Troubleshooting:
+- If connection fails, check network connectivity and simulator bridging
+- Manual startup: adb shell su root sh /data/server/bin/launch.sh
+
+METHOD 2: Magisk Module Installation
+-------------------------------------
+For devices running Magisk 20.4 or newer:
+
+1. Download lamda-magisk-module.zip from releases page
+2. Use Magisk App → Modules → Install from local
+3. Restart device
+
+The system waits 30 seconds before launching to prevent crashes.
+Auto-starts at boot.
+
+METHOD 3: Manual Installation
+------------------------------
+For devices without Magisk support:
+
+Step 1: Get Device Architecture
+getprop ro.product.cpu.abi
+
+Common outputs: arm64-v8a, x86, x86_64, armeabi-v7a
+
+Step 2: Push Files
+adb push lamda-server-[arch].tar.gz /data/local/tmp
+adb push busybox-[arch] /data/local/tmp
+
+Step 3: Extract and Configure
+After entering `adb shell` and running `su`:
+
+chmod 755 /data/local/tmp/busybox-[arch]
+/data/local/tmp/busybox-[arch] tar -C /data -xzf /data/local/tmp/lamda-server-[arch].tar.gz
+rm /data/local/tmp/lamda-server-[arch].tar.gz
+rm /data/local/tmp/busybox-[arch]
+
+IMPORTANT CONFIGURATION NOTES:
+- Directory Location: /data/usr serves as FIRERPA's user data directory
+- Must be manually created before first startup if pre-configuring
+- Startup Configuration: Use properties.local file for automatic connections to OpenVPN,
+  proxies, and port forwarding
+- Security Warning: "FIRERPA installed by default does not enable any authentication"
+  Requires trusted network usage unless encryption certificates are enabled
+
+CLIENT INSTALLATION
+-------------------
+Requirements: Python 3.6-3.12
+
+Installation:
+pip3 install -U lamda[full]
+
+Alternative (if above fails):
+pip3 install -U 'lamda[full]'
+
+Tip: Add -i parameter to specify nearby PIP mirror for faster installation
+
+Verification:
+python3 -m lamda.client
+
+COMMON ISSUES AND SOLUTIONS:
+
+1. UnicodeEncodeError with Chinese characters:
+   - Occurs when system paths contain non-ASCII characters
+   - gRPC cannot process correctly
+   - Verify: import sys; print(sys.path)
+   - Remove Chinese paths from environment variables like PYTHONPATH
+
+2. ImportError problems:
+   pip3 install -U --force-reinstall 'lamda[full]'
+
+3. Persistent issues:
+   - Use a virtual environment (uv recommended based on user settings)
+
+Post-installation:
+Update third-party Frida-dependent libraries (frida-tools, objection, etc.)
+to prevent runtime anomalies.
+
+STARTING THE SERVER
+-------------------
+Auto-starts if installed via Magisk or auto-start APP after device restart.
+Manual installations require:
+
+sh /data/server/bin/launch.sh
+
+Steps:
+1. Enter adb shell and switch to root: su
+2. Run launch command
+3. Wait for process completion
+4. Success message: "llllaamDaa started"
+5. Service operates in background mode
+
+TROUBLESHOOTING ERROR MESSAGES:
+
+Error                  | Resolution
+-----------------------|--------------------------------------------------
+already running        | Service is currently active
+invalid TZ area        | System timezone requires configuration
+not run as root        | Command must execute with root privileges
+unsupported sdk        | Android version incompatibility detected
+abi not match          | Incorrect architecture package installed
+file broken            | Reinstall required due to corruption
+
+Notes:
+- Initial remote desktop access may experience loading delays; device restart may help
+- After successful startup, close terminal and proceed with other tasks
+- Failed startups require troubleshooting based on displayed error messages
+
+EXITING THE SERVER
+------------------
+"FIRERPAλ is intended for continuous 24/7 operation; frequent starts/stops are not recommended"
+
+METHOD 1: Command Line (Primary)
+kill -SIGUSR2 $(cat /data/usr/lamda.pid)
+
+METHOD 2: Interface-Based
+Use "Shutdown and Restart" section in documentation
+
+IMPORTANT WARNINGS:
+- Service Design: Intended for continuous operation; frequent cycling not recommended
+- Exit Duration: Complete shutdown may require more than 10 seconds
+- Command Caution: Execute kill command only once; repeating consecutively can cause instability
+- Risk Advisory: Frequent service cycling can easily introduce system instability
+
+UNINSTALLING THE SERVER
+------------------------
+Prerequisites:
+Follow "Exiting the Server" and wait at least 30 seconds to ensure service exits normally.
+
+STANDARD INSTALLATION:
+rm -rf /data/server /data/usr
+
+MAGISK INSTALLATION:
+Simply remove from Magisk modules—no additional commands needed.
+
+WARNING:
+"Please be cautious when removing the /data/usr directory, as this directory contains
+relevant data for your use of the FIRERPA service."
+
+After uninstallation:
+"FIRERPA will be completely removed from your device without leaving any other files."
+Recommend restarting device afterward to ensure clean completion.
+
+========================================
+3. BASIC USAGE
+========================================
+
+PREPARATION FOR USE
+-------------------
+Before continuing with automation and API usage:
+
+1. Ensure FIRERPA server on mobile device has been started
+2. Default port: 65000
+3. Obtain device IP address from WLAN settings
+4. Port specification not necessary unless modified from default
+5. NAT Considerations: Some devices behind NAT; refer to Installation Preparation if
+   IP identification problematic
+
+Example: Documentation assumes reference device IP of 192.168.0.2
+
+CONNECTING VIA PYTHON
+----------------------
+Basic connection:
+
+from lamda.client import *
+d = Device("192.168.0.2")
+
+With encryption certificate:
+
+from lamda.client import *
+d = Device("192.168.0.2", certificate="/path/to/lamda.pem")
+
+WORKING WITH API RESPONSES:
+Many interfaces return native proto classes. Access values through output properties:
+
+result = status.get_battery_info()
+print(result.batt_temperature)  # Access specific field
+
+SIMPLE EXAMPLES:
+
+Display message on device:
+d.show_toast("Hello from Lamda!")
+
+Make device beep (useful for locating devices):
+d.beep()
+
+========================================
+4. REMOTE DESKTOP
+========================================
+
+ACCESS & CONNECTION
+-------------------
+Network-based device control via browser.
+
+Access: http://192.168.0.2:65000
+Requirements: Chrome 95+ browsers
+Mode: Single active operator - only first connected user can control device
+      Subsequent connections display in view-only mode
+
+SECURITY CONFIGURATION
+----------------------
+When launching server with encryption certificates via --certificate:
+- HTTPS becomes mandatory
+- Convert URL to https://
+- Authenticate with certificate's embedded password (line one of certificate file)
+- Custom credentials in properties.local: ssl-web-credential=12345
+
+FILE MANAGEMENT
+---------------
+Upload Capability:
+- Drag files/folders directly onto right-side terminal
+- Supports up to 2,000 simultaneous uploads
+- 256MB per-file limit
+- All uploaded content receives 644 permissions
+- Default storage: /data/usr/uploads (configurable)
+
+Download Method:
+- Access http://192.168.0.2:65000/fs/ to browse device files in index format
+- Or use folder icon in remote desktop's top-right corner
+
+CUSTOMIZATION OPTIONS
+----------------------
+Settings gear (upper-right) provides adjustments for:
+- Upload directory
+- Frame rate
+- Resolution scaling
+- Image quality
+- Clipboard sharing
+
+Video Encoding Options:
+- H.264: Reduces bandwidth
+- Hardware acceleration: Select "System" backend
+- "Default": Uses software encoding
+
+LIMITATIONS
+-----------
+- Platform doesn't support Chinese character input—only standard English text works
+- For enhanced keyboard functionality, explore "Connecting to Built-in ADB" documentation
+- Tools like Genymobile/scrcpy recommended for advanced input
+
+========================================
+5. DEVICE DISCOVERY (mDNS)
+========================================
+
+OVERVIEW
+--------
+mDNS-based discovery of FIRERPA devices on local networks.
+Requirements: FIRERPA version 7.85 or higher
+Enables: Locate devices and access services via domain names like {ro.serialno}.local
+
+DEVICE DISCOVERY METHODS
+------------------------
+
+Using mdns-beacon Tool:
+1. Install: pip install mdns-beacon
+2. Execute: mdns-beacon listen --service _lamda._tcp.local.
+
+Displays all devices running FIRERPA on current network.
+Note: Results may vary based on network configuration and device model compatibility.
+
+Accessing via Domain Names:
+Format: {android_id}.local:65000
+Retrieve Android device ID: adb shell settings get secure android_id
+
+Programmatic Discovery:
+Use zeroconf library (python-zeroconf) for automated device discovery and
+Android device information enumeration.
+
+CONFIGURATION OPTIONS
+---------------------
+Customize via properties.local configuration file:
+
+mdns.meta=true         - Enable broadcasting of device information (ID, ABI, Android version, model)
+mdns.service           - Modify mDNS service name from default "lamda"
+mdns.name              - Assign fixed, unique server names per device for enhanced privacy
+
+========================================
+6. SCHEDULED TASKS
+========================================
+
+OVERVIEW
+--------
+Enable periodic execution of scripts following standard Linux Crontab syntax.
+"All rules will be executed with root privileges."
+
+REQUIREMENTS:
+- Access via FIRERPA's remote desktop terminal, built-in ADB terminal, or SSH terminal
+- Basic crontab knowledge required
+- Device should remain powered on for reliable task execution
+
+IMPLEMENTATION STEPS
+--------------------
+1. Enter Edit Mode: crontab -e
+2. Write Rules: Press 'i' (English input mode), then add crontab expressions
+3. Save: Press ESC, then SHIFT+:, type 'wq' and press Enter
+
+COMMON CRONTAB EXAMPLES
+-----------------------
+Schedule                          | Command
+----------------------------------|------------------------------------------------
+System startup                    | @reboot echo Execute when framework starts
+Hourly                           | 0 */1 * * * echo Execute every hour
+Every minute                     | * * * * * echo Execute every minute
+Daily at 8 AM                    | 0 8 * * * echo Execute at 8 o'clock daily
+
+OUTPUT REDIRECTION:
+To save task output:
+* * * * * echo hello >/data/usr/script.log 2>&1
+
+IMPORTANT NOTE:
+"Due to Android's sleep mechanism, scheduled tasks may not run at the time you expect
+after the screen is turned off."
+
+VALIDATION:
+Use an online Crontab verification website to confirm rule accuracy before deployment.
+
+========================================
+7. BUILT-IN TERMINAL
+========================================
+
+OVERVIEW
+--------
+Key FIRERPA feature allowing real-time command execution.
+Access: Through remote desktop, SSH, or ADB connections
+Note: "The terminal supports command completion but not parameter completion."
+
+AVAILABLE ALIASES
+-----------------
+l      → ls
+ll     → ls -l
+la     → ls -la
+py     → python
+..     → Navigate parent directory
+...    → Navigate parent directories
+t      → Go to /data/local/tmp
+p      → Return to previous directory
+
+BUILT-IN COMMANDS
+-----------------
+The system includes numerous pre-installed tools:
+
+Development & Analysis:
+Python, strace, ltrace, frida tools suite, capstone, keystone, unicorn
+
+Networking:
+curl, scapy, tcpdump, socat, stunnel, redir, iperf3
+
+System Tools:
+busybox, ncdu, nano, vi, sqlite3, MemDumper, fsmon
+
+PYTHON LIBRARIES
+----------------
+Pre-installed third-party modules:
+
+Cryptography:
+Crypto, OpenSSL, bcrypt, cryptography
+
+Image Processing:
+PIL, cv2
+
+Data Handling:
+protobuf, msgpack, ujson
+
+Networking:
+requests, websocket
+
+Specialized Tools:
+frida, numpy, redis, peewee
+
+CRITICAL LIMITATION:
+"You cannot install additional libraries through PIP or APT in the built-in terminal environment."
+Users requiring additional dependencies should utilize the Virtual Debian Environment.
+
+========================================
+8. VIRTUAL DEBIAN ENVIRONMENT
+========================================
+
+OVERVIEW
+--------
+Complete Debian environment within Android devices, comparable to Termux or androdeb.
+Allows: apt package installation, software compilation, BPF program development on Android.
+
+INSTALLATION STEPS
+------------------
+1. Download Package:
+   Obtain lamda-mod-debian-arm64-v8a.tar.gz from project's release page
+   (select architecture-appropriate version)
+
+2. Upload via Remote Desktop:
+   Use remote desktop interface to drag and upload file
+   Default location: /data/usr/uploads
+
+3. Extract Installation (one-time command):
+   tar -C /data/usr/modules -xzf /data/usr/uploads/lamda-mod-debian-arm64-v8a.tar.gz
+
+BASIC USAGE
+-----------
+Entering Interactive Terminal:
+debian /bin/bash
+
+Executing Single Commands:
+debian /bin/bash -c id
+
+IMPORTANT LIMITATION:
+"Only one instance can enter the virtual environment at a time. After you execute
+debian /bin/bash and keep using it, if you continue to execute this command in other
+terminals, it will return an error, unless you exit the first started debian /bin/bash."
+
+ADVANCED SETUP (SSH + Python)
+------------------------------
+1. Enter environment and install packages
+2. Configure SSH settings in sshd_config
+3. Set root password
+4. Start SSH daemon: debian /usr/sbin/sshd -D -e
+5. Automate via scheduled tasks:
+   @reboot debian /usr/sbin/sshd -D -e >/data/usr/sshd.log 2>&1
+6. Connect remotely: ssh root@[device-ip]
+   Default password: lamda
+
+========================================
+9. PROGRAMMING INTERFACE (API)
+========================================
+
+OVERVIEW
+--------
+"Up to 160 programming API interfaces, allowing you to manage and operate Android
+devices meticulously."
+Coverage: Command execution, system settings, application management, automation,
+proxy services, file operations.
+
+BASIC OPERATIONS
+----------------
+
+Display Message:
+d.show_toast("message")
+
+Beep (useful for locating devices):
+d.beep()
+
+DEVICE INFORMATION
+------------------
+
+Get Device Details:
+d.device_info()
+Returns: productName, sdkInt, displayHeight, displaySizeDpX, displaySizeDpY,
+         displayWidth, screenOn, naturalOrientation, currentPackageName
+
+Server Information:
+d.server_info()
+Returns: uniqueId, version, architecture, uptime, secure metrics
+
+Screen Status Checks:
+d.is_screen_on()        - Determines if display is active
+d.is_screen_locked()    - Verifies lock state
+
+SCREEN CONTROL
+--------------
+d.sleep()                                    - Deactivates display (power button equivalent)
+d.wake_up()                                  - Activates display
+d.screenshot(60)                             - Captures with quality parameter
+d.screenshot(60, Bound(top, left, right, bottom))  - Regional cropping
+
+INPUT OPERATIONS
+----------------
+
+Touch Actions:
+d.click(Point(x=100, y=100))                - Single tap
+d.drag(Point_A, Point_B)                    - Press and drag motion
+d.swipe(Point_A, Point_B)                   - Swipe gesture
+d.swipe_points(p1, p2, p3)                  - Multi-point swipe path
+
+Physical Keys:
+d.press_key(Keys.KEY_BACK)                  - Supports KEY_BACK, KEY_HOME, KEY_VOLUME_UP,
+                                              KEY_POWER, and others
+d.press_keycode(code)                       - Additional Android KeyEvent codes
+
+SYSTEM INTERFACE
+----------------
+d.get_clipboard()                           - Retrieve clipboard content (Android 9 and below)
+d.set_clipboard("text")                     - Write clipboard data
+d.dump_window_hierarchy()                   - Extract current page XML layout
+d.wait_for_idle(5000)                       - Pause until UI stabilizes (milliseconds)
+d.get_last_toast()                          - Retrieve latest system toast
+
+SETTINGS & NOTIFICATIONS
+------------------------
+d.open_quick_settings()                     - Display settings panel (half-open state)
+d.open_notification()                       - Expand notification drawer
+
+========================================
+10. ADVANCED INTERFACE OPERATIONS
+========================================
+
+OVERVIEW
+--------
+Deep automation interfaces for detailed operations on mobile device interfaces.
+
+GETTING ELEMENTS
+----------------
+Elements located via selectors.
+Important: "The element you click directly on the left interface may not be the actual
+element" due to overlapping components.
+
+Selection Methods:
+element = d(text="同意")
+element = d(resourceId="com.tencent.news:id/btm_first_agree")
+
+ELEMENT OPERATIONS
+------------------
+
+Click Operations:
+element.click()                              - Standard click
+element.click_exists(corner=Corner.COR_TOPLEFT)  - Click with position specification
+element.long_click()                         - Extended press
+element.click_exists()                       - Conditional click without exception throwing
+
+Information Retrieval:
+element.exists()                            - Existence check
+element.info()                              - Detailed metadata (bounds, className, text)
+element.count()                             - Quantity of matching elements
+element.get(3)                              - Retrieve specific nth element
+
+Coordinate Access:
+info.bounds.center()                        - Center point
+info.bounds.corner("top-left")              - Corner coordinates
+info.bounds.width, info.bounds.height       - Dimensions
+
+TEXT INPUT
+----------
+Important: "When getting input box elements, your input method must be in a popped-up
+state before finding relevant elements."
+
+Operations:
+element.set_text("你好世界")                 - Input text
+element.get_text()                          - Retrieve current content
+element.clear_text_field()                  - Clear field
+
+NAVIGATION
+----------
+Normal Swipe:
+d().swipe(direction=Direction.DIR_UP, step=32)
+
+Fast Swipe:
+d().fling_from_top_to_bottom()
+d().fling_from_bottom_to_top()
+d().fling_from_left_to_right()
+d().fling_from_right_to_left()
+
+Scroll (mechanical swiping):
+d().scroll_from_top_to_bottom(step)
+d().scroll_from_bottom_to_top(step)
+d().scroll_from_left_to_right(step)
+d().scroll_from_right_to_left(step)
+
+ADVANCED FEATURES
+-----------------
+element.wait_for_exists(10*1000)            - Wait for appearance (milliseconds)
+element.wait_until_gone(10*1000)            - Wait for disappearance
+element.screenshot(quality=60)               - Capture element-level screenshots
+element.child(index=1)                       - Locate child elements
+element.sibling()                            - Find sibling elements
+element.drag_to(Selector(...))               - Drag operations
+
+========================================
+11. IMAGE MATCHING OPERATIONS
+========================================
+
+OVERVIEW
+--------
+Locate and interact with UI elements through image matching.
+Two primary methods: Template matching and Feature point matching (SIFT)
+
+KEY CONCEPTS:
+- Template matching: Better performance, consistent resolutions
+- Feature point matching: Adapts to varying screen resolutions, requires threshold tuning
+- Processing: Server-side (preserves local resources)
+- Limitation: Mobile device performance may limit efficiency
+
+MAIN FUNCTION SYNTAX
+--------------------
+d.find_similar_image(
+    data,
+    threshold=0.0,
+    distance=250,
+    scale=1.0,
+    area=FindImageArea.FIA_WHOLE_SCREEN,
+    method=FindImageMethod.FIM_TEMPLATE
+)
+
+PARAMETERS
+----------
+Parameter  | Purpose
+-----------|------------------------------------------------------------------
+data       | Image byte data for matching
+threshold  | Similarity filter level
+distance   | Maximum feature point tolerance
+scale      | Performance optimization ratio
+area       | Screen region restriction
+method     | Algorithm selection
+
+MATCHING METHODS
+----------------
+FIM_TEMPLATE:
+- Fast, texture-dependent
+- Limited rotation/scale tolerance
+
+FIM_FEATURE:
+- Robust against transformations
+- Suits complex scenes
+
+MATCHING AREAS
+--------------
+Nine predefined regions optimize performance:
+- Full-screen
+- Halves: left, right, top, bottom
+- Corners: top-left, top-right, bottom-left, bottom-right
+
+========================================
+12. TEXT RECOGNITION (OCR)
+========================================
+
+OVERVIEW
+--------
+Leverage OCR technology for interface automation when conventional selectors don't work.
+Particularly useful in gaming applications.
+
+OCR BACKEND SETUP
+-----------------
+
+PaddleOCR with GPU:
+d.setup_ocr_backend(
+    "paddleocr",
+    quality=80,
+    use_gpu=True,
+    drop_score=0.85,
+    use_space_char=True
+)
+
+EasyOCR for Chinese and English:
+d.setup_ocr_backend("easyocr", ["ch_sim", "en"], quality=80)
+
+Custom HTTP Backend:
+For systems managing multiple devices, implement custom backend as HTTP service
+to avoid excessive resource consumption from repeated initialization.
+
+OCR SELECTOR TYPES
+------------------
+Method                  | Purpose
+------------------------|--------------------------------------------------
+text="Mine"            | Exact text matching
+textContains="Mine"    | Partial text matching
+textMatches=".*?Mine"  | Regex pattern matching
+
+SUPPORTED OPERATIONS
+--------------------
+- click()          - Activate matched element
+- click_exists()   - Conditional activation
+- exists()         - Verify presence
+- screenshot()     - Capture element image
+- info()           - Retrieve OCR metadata
+
+KEY LIMITATION:
+"OCR recognition methods only support checking if elements exist, clicking, taking
+screenshots, and other operations."
+More complex interactions aren't available through this interface.
+
+========================================
+13. INTERFACE MONITOR
+========================================
+
+OVERVIEW
+--------
+Real-time listener for UI changes that performs automatic actions when conditions match.
+Functions similarly to ad-skipping automation tools.
+Caution: Performs automatic clicks and key presses that may interfere with manual tasks.
+
+CORE FUNCTIONS
+--------------
+Enable Monitoring:
+d.set_watcher_loop_enabled(True)
+
+Check Status:
+d.get_watcher_loop_enabled()
+
+Disable Monitoring:
+d.set_watcher_loop_enabled(False)
+
+Clear All Events:
+d.remove_all_watchers()
+
+EVENT REGISTRATION TYPES
+------------------------
+
+Click Events - Auto-clicks matching UI elements:
+d.register_click_target_selector_watcher("EventName", [Selector conditions], target_selector)
+
+Key Press Events - Triggers keyboard actions:
+d.register_press_key_watcher("EventName", [Selector conditions], Keys.KEY_CODE)
+
+Count Events - Tallies element appearances:
+d.register_none_op_watcher("EventName", [Selector conditions])
+
+Retrieve counts:
+d.get_watcher_triggered_count("EventName")
+
+EVENT MANAGEMENT
+----------------
+Enable: d.set_watcher_enabled("name", True)
+Disable: d.set_watcher_enabled("name", False)
+Remove: d.remove_watcher(name)
+Check status: d.get_watcher_enabled(name)
+
+CRITICAL NOTE:
+"Any matching event operations that occur on the interface before enabling the monitor
+or enabling monitor events will not be processed!"
+
+========================================
+14. BUILT-IN FRIDA
+========================================
+
+OVERVIEW
+--------
+FIRERPA includes integrated, latest-version Frida with:
+- Built-in anti-detection patches
+- Custom hiding features
+- No separate frida-server setup required
+
+IMPORTANT: "Since FIRERPA version 7.18, the built-in FRIDA requires a token parameter
+to connect."
+
+THREE USAGE METHODS
+-------------------
+
+METHOD 1: Code-Based Integration
+---------------------------------
+Access Frida through FIRERPA client API:
+
+conn = d.frida
+conn.enumerate_processes()
+
+Alternative approach using direct token retrieval:
+
+token = d._get_session_token()
+manager = frida.get_device_manager()
+conn = manager.add_remote_device("192.168.0.2:65000", token=token)
+
+METHOD 2: Command-Line Usage
+-----------------------------
+Documentation emphasizes using frida commands through remote desktop for simplicity
+(no additional parameters needed there).
+
+For local machine usage, command structure requires:
+- Host parameter: -H 192.168.0.2:65000 (not -U)
+- Token parameter: --token xxxxxxxxxxxxxxxx
+- Optional certificate: --certificate /path/to/lamda.pem (if encryption enabled)
+
+Example command:
+frida -H 192.168.0.2:65000 -f com.android.settings --token xxxxxxxxxxxxxxxx
+
+METHOD 3: Objection Tool Integration
+-------------------------------------
+Patched version available at provided GitHub repository.
+Usage pattern:
+
+objection -N -h 192.168.0.2 -p 65000 --token xxxxxxxxxxxxxxxx explore
+
+CRITICAL DETAILS:
+- Default FIRERPA port is 65000 (not Frida's 27042)
+- Tokens are fixed 16-character strings
+- Encryption certificates require additional command parameters for security
+
+========================================
+PERSISTENT FRIDA SCRIPTS
+========================================
+
+OVERVIEW
+--------
+FIRERPA enables persistent Frida script injection with automatic management.
+Scripts remain active even after app crashes or process exits.
+Automatic reinitiation upon app restart.
+Feature launched in version 7.80.
+
+INSTALLING SCRIPTS
+------------------
+Deploy scripts to applications:
+
+app = d.application("com.android.settings")
+app.attach_script(script, runtime=ScriptRuntime.RUNTIME_QJS, standup=5)
+
+IMPORTANT LIMITATION:
+"The script manager only allows one script to be injected for each APP at a time."
+
+Parameters:
+- script: Frida script content (supports bytecode)
+- runtime: Execution environment (default: qjs)
+- standup: Delay in seconds (1-300) to prevent early injection issues
+- spawn: Optional mode for automatic app restart on failure
+
+UNINSTALLING SCRIPTS
+--------------------
+Remove injected scripts and halt monitoring:
+
+app = d.application("com.android.settings")
+app.detach_script()
+
+STATUS VERIFICATION
+-------------------
+Two diagnostic methods:
+
+Installation check:
+app.is_attached_script()
+
+Injection verification (determines if script actively runs in process):
+app.is_script_alive()
+
+SCRIPT LOGGING
+--------------
+Monitor console output and errors by filtering logs:
+
+grep SCRIPT /data/local/tmp/server.log
+
+OFFLINE PERSISTENCE
+-------------------
+Configure scripts as YAML files in /data/usr/modules/script/ for automatic loading
+without API calls.
+
+Configuration template:
+
+enable: true
+application: "com.android.settings"
+version: "2.10"
+runtime: "qjs"
+script: !!binary "[base64-encoded content]"
+standup: 10
+spawn: false
+
+The system monitors this directory for real-time updates, additions, and deletions.
+
+========================================
+FRIDA DATA REPORTING
+========================================
+
+OVERVIEW
+--------
+Enable automatic capture of method call data through custom scripts.
+Automated submission to Redis, HTTP interfaces, or RabbitMQ queues.
+Supports data compression via zlib for improved network performance.
+
+WRITING REPORTING SCRIPTS
+--------------------------
+Scripts use emit(name, content) method to submit intercepted data.
+
+Parameters:
+- name: Identifies data type (e.g., "product_info")
+- content: Actual data as string or byte array
+
+Example structure:
+Java.perform function intercepts okhttp traffic, extracts URL and body information,
+then emits data as JSON string.
+
+DATA REPORTING DESTINATIONS
+----------------------------
+Three supported options:
+- Redis queues (simplest, no metadata)
+- HTTP interfaces (includes metadata via query parameters)
+- RabbitMQ queues (metadata in headers)
+
+METADATA FIELDS:
+Reports include: application name, device ID, encoding type, data name, script ID,
+sequence number, timestamp, multi-instance application ID.
+Note: Redis reporting excludes metadata due to protocol limitations.
+
+IMPLEMENTATION
+--------------
+Script Injection:
+
+app = d.application("com.android.settings")
+app.attach_script(script, emit="redis://192.168.1.10/0")
+
+Alternative HTTP endpoint:
+app.attach_script(script, emit="http://192.168.1.10/dataReport")
+
+Compression Option:
+app.attach_script(..., encode=DataEncode.DATA_ENCODE_ZLIB)
+
+Decompression:
+import zlib
+zlib.decompress(data)
+
+Removal:
+app.detach_script()
+
+KEY REQUIREMENTS:
+- HTTP services must return "OK" or "SUCCESS" with status 200
+- RabbitMQ queues require manual creation
+- Only standalone Redis is supported (no clusters)
+- HTTP requests are multi-threaded and may arrive out-of-sequence
+
+========================================
+FRIDA EXPORTED INTERFACES (RPC)
+========================================
+
+OVERVIEW
+--------
+Enables developers to extend FIRERPA functionality by implementing custom Frida RPC methods.
+Users write Hook code for ultimate app control.
+Requires familiarity with Frida scripting.
+
+WRITING EXPORT SCRIPTS
+-----------------------
+Scripts must follow specific formatting requirements:
+- Function names use camelCase with lowercase first letter
+- Avoid all-caps naming (e.g., use sendHttpRequest not sendHTTPRequest)
+- Wrap code in Java.perform() blocks
+- Use mandatory return performRpc patterns
+
+THREE EXECUTION CONTEXTS:
+
+performRpcJVMCall:
+"Execute on JVM thread" - supports Java operations like Java.use()
+
+performRpcJVMCallOnMain:
+"Execute on UI thread" - necessary for UI operations; avoid blocking main thread
+
+performRpcCall:
+Basic JavaScript only - no Java layer logic
+
+INJECTING SCRIPTS
+-----------------
+Inject using persistent Frida script method:
+
+app = d.application("com.android.settings")
+app.attach_script(script, runtime=ScriptRuntime.RUNTIME_QJS, standup=5)
+
+Verify injection status:
+app.is_script_alive()
+
+CALLING EXPORTED METHODS
+-------------------------
+Direct API calls:
+
+app = d.application("com.android.settings")
+app.exampleFunc1("FIRE", "RPA")
+
+Method names support both camelCase and snake_case variations:
+exampleFunc1 equals example_func1
+
+Multi-instance applications: Specify UID parameter to target specific instances
+
+HTTP INTERFACE CALLS
+--------------------
+Starting version 8.15, supports JSON-RPC 2.0 protocol:
+
+import jsonrpclib
+server = jsonrpclib.Server('http://192.168.0.2:65000/script/com.android.settings/0')
+server.example_func1("FIRE", "RPA")
+
+Legacy protocol also supported via POST requests with JSON-serialized arguments.
+
+For secured servers:
+- Include X-Token header with certificate password
+- Use HTTPS
+
+HTTP STATUS CODES:
+
+Code | Meaning
+-----|--------------------------------------------------------------
+200  | Success
+410  | Script not injected/installed
+500  | Script/parameter error
+400  | Invalid parameters
+
+TROUBLESHOOTING:
+Hangs or timeouts typically occur when apps run backgrounded and enter sleep state.
+Keep apps in foreground during testing.
+
+========================================
+15. BINARY PATCH
+========================================
+
+OVERVIEW
+--------
+Modify device files using hexadecimal search-and-replace operations with wildcard support.
+
+WILDCARD SYNTAX
+---------------
+System supports flexible pattern matching:
+- ?? matches any byte
+- B? matches bytes starting with B (like BA, B1, B9)
+- Example: 49 BA ?? ?C matches 49 BA [any] [any ending in C]
+
+BASIC USAGE
+-----------
+Standard replacement:
+
+d.hex_patch("AA BB CC D?", "AA BB CC DD", "/data/test.bin")
+
+Returns object containing:
+- count: number of replacements made
+- replaces[].offset: byte position of each replacement
+
+PARAMETERS
+----------
+
+maxreplace - Limits replacement count (default: all matches replaced):
+d.hex_patch("AA BB CC D?", "AA BB CC DD", "/data/test.bin", maxreplace=2)
+
+dryrun - Test mode that identifies matches without modifying files:
+d.hex_patch("AA BB ?? ??", "AA BB 00 00", "/data/test.bin", dryrun=True)
+
+FILE PATH WILDCARDS
+-------------------
+Paths support glob patterns:
+/data/app/*/test.bin matches test.bin in any first-level subdirectory under /data/app
+
+REQUIREMENTS:
+Patterns require "at least two valid matching digits" for functionality.
+
+========================================
+16. BUILT-IN ADB MANAGEMENT
+========================================
+
+OVERVIEW
+--------
+FIRERPA system includes independent ADB service that operates separately from system's
+native ADB implementation.
+
+Key feature: "Connect to the highest privilege ADB without enabling developer mode"
+through wireless connectivity.
+
+IMPORTANT LIMITATION:
+Built-in ADB service does not currently support JDWP debugging functions
+(conflicts with system's native implementation).
+
+INSTALLING ADB PUBLIC KEYS
+---------------------------
+
+Key Location:
+- Linux/Mac: ~/.android/ directory
+- Windows: C:\Users\[username]\.android\ directory
+- Filename: adbkey.pub
+
+If only adbkey exists, generate public key:
+adb pubkey adbkey >adbkey.pub
+
+Installation Process:
+d.install_adb_pubkey("/path/to/adbkey.pub")
+
+After successful installation, connect wirelessly:
+adb connect 192.168.0.2:65000
+
+REMOVING ADB PUBLIC KEYS
+-------------------------
+Uninstall public key from built-in ADB service:
+
+d.uninstall_adb_pubkey("/path/to/adbkey.pub")
+
+Note: System-authorized key from developer mode settings is incompatible with
+built-in ADB service.
+
+========================================
+17. CONNECTIVITY
+========================================
+
+CONNECTING TO BUILT-IN ADB
+---------------------------
+Install Key:
+python3 -u adb_pubkey.py install 192.168.1.2
+
+Connect:
+adb connect 192.168.1.2:65000
+
+Uninstall Key:
+python3 -u adb_pubkey.py uninstall 192.168.1.2
+
+CONNECTING TO BUILT-IN SSH
+---------------------------
+Connection command:
+bash ssh.sh 192.168.1.2
+
+COPYING FILES VIA SCP
+---------------------
+Retrieve from device:
+bash scp.sh 192.168.1.2:/sdcard/DCIM .
+
+Send to device:
+bash scp.sh test/ 192.168.1.2:/sdcard
+
+Technical Details:
+- Tool uses wrapper script: scp.sh
+- Operations target device IP addresses
+- File paths follow standard SCP syntax with colon-separated device locations
+- Supports both directory and individual file transfers
+
+========================================
+18. ONE-CLICK PACKET CAPTURE
+========================================
+
+OVERVIEW
+--------
+Automated man-in-the-middle packet capture for Android 6.0-14.
+No manual certificate or proxy configuration required.
+Supports real-time packet modification.
+Guarantees: "No packets cannot be captured (except certificate pinning)."
+
+KEY REQUIREMENTS
+----------------
+- Computer and device on same network or USB-connected
+- mitmproxy installed (mitmdump command available)
+- Network firewall temporarily disabled
+- Python 3 (or use pre-packaged startmitm.exe)
+
+BASIC COMMANDS
+--------------
+
+Simple packet capture:
+python3 -u startmitm.py 192.168.0.2
+
+Shared analysis (colleagues view via browser):
+python3 -u startmitm.py 192.168.0.2 --web-port 7890 --web-host 0.0.0.0
+
+Specific application only:
+python3 -u startmitm.py 192.168.0.2:com.some.package
+
+With real-time modification script:
+python3 -u startmitm.py 192.168.0.2 -s http_flow_hook.py
+
+NETWORK SCENARIOS
+-----------------
+
+USB ADB connection:
+python3 -u startmitm.py localhost
+python3 -u startmitm.py localhost --serial [device_serial]
+
+International/Upstream proxy:
+python3 -u startmitm.py 192.168.0.2 --upstream http://127.0.0.1:7890 --dns https://dns.google/dns-query
+
+DNS packet capture:
+python3 -u startmitm.py 192.168.0.2 --dns 114.114.114.114
+
+CRITICAL NOTES
+--------------
+- Close target applications completely before starting capture (not just via taskbar)
+- Exit with CONTROL+C once only
+- SSL pinning requires Frida bypass scripts
+- QUIC auto-downgrades but may cause temporary lag
+
+========================================
+19. ENCRYPTION CERTIFICATES
+========================================
+
+OVERVIEW
+--------
+Create encryption certificates for FIRERPA to secure communication between users
+and service.
+"This certificate is used to encrypt the communication traffic between you and the
+FIRERPA service, preventing unauthorized access."
+
+KEY DISTINCTION:
+Certificate discussed here differs from those used in packet capture operations.
+Purpose: Protecting remote desktop access and service communication rather than
+intercepting network traffic.
+
+GENERATION PROCESS
+------------------
+Location: cert.py script resides in project's tools directory.
+
+Command:
+python3 cert.py mydevice.local
+
+Prerequisites: Install necessary environment and dependencies beforehand.
+Regular updates recommended to avoid compatibility issues.
+
+GENERATED FILES
+---------------
+- mydevice.local.pem - The encryption certificate
+- root.crt and root.key - Root certificates (require secure storage but aren't directly used)
+
+CERTIFICATE FORMAT
+------------------
+Output contains RSA private key and certificate blocks in PEM format.
+Includes default remote desktop password embedded as parameter: PASSWD=...
+
+IMPLEMENTATION EFFECTS
+----------------------
+Once applied to FIRERPA:
+- Remote desktop access requires HTTPS protocol
+- Authorization demands password from certificate
+- SSH login also requires certificate-based authentication
+
+IMPORTANT: Users shouldn't manually edit certificate file.
+
+========================================
+20. DISTRIBUTED DEPLOYMENT
+========================================
+
+OVERVIEW
+--------
+Enable remote access to devices located elsewhere using distributed deployment methods.
+Three primary approaches: FRP forwarding, OpenVPN networking, Xinghuo Platform integration.
+
+FRP-BASED SOLUTIONS
+-------------------
+
+Internal Port Forwarding:
+Download FRP server from fatedier/frp repository (v0.45.0+).
+Launch with parameters controlling token authentication, bind addresses, allowed port
+ranges (10000-15000).
+
+Configuration - properties.local variables:
+frp.enable=true
+frp.server-address=your-server.com
+frp.server-port=6009
+frp.remote-port=12345
+frp.token=your-token
+frp.protocol=tcp
+
+Connecting via FRP:
+Device("127.0.0.1", port=12345)
+
+Or browser access:
+http://[frp-server-ip]:12345
+https://[frp-server-ip]:12345 (with certificate)
+
+PUBLIC NETWORK ACCESS WARNING:
+Documentation advises against exposing devices directly to public networks.
+If necessary:
+- FIRERPA must use encryption certificates
+- Proxy bind address must change from localhost to 0.0.0.0
+- Without certificates: "anyone will be able to access it, which is extremely dangerous"
+
+OPENVPN APPROACH
+----------------
+Setup involves deploying OpenVPN server (detailed in separate documentation).
+Connect personal devices to same virtual network.
+
+XINGHUO PLATFORM
+-----------------
+Simplified alternative requiring free access code from Device Farm WeChat account.
+
+========================================
+21. DEPLOYING OPENVPN SERVICE
+========================================
+
+OVERVIEW
+--------
+Deploy OpenVPN service using Docker on Linux systems (tested on Debian 9).
+Default port: 1190/UDP
+
+SERVER PREPARATION
+------------------
+
+Enable IP forwarding:
+echo net.ipv4.ip_forward=1 >>/etc/sysctl.conf
+sysctl -p
+
+For UFW firewall systems:
+Add to /etc/ufw/before.rules before *filter rules:
+
+*nat
+:POSTROUTING ACCEPT [0:0]
+-A POSTROUTING -s 172.27.27.0/24 -o eth0 -j MASQUERADE
+COMMIT
+
+Change /etc/default/ufw:
+DEFAULT_FORWARD_POLICY="ACCEPT"
+
+Then reload:
+ufw reload
+
+For systems without UFW:
+iptables -P FORWARD ACCEPT
+
+CONFIGURATION SETUP
+-------------------
+
+Create directory and initialize:
+mkdir -p ~/lamda-openvpn-server
+docker run -it --rm --privileged --net host -v ~/lamda-openvpn-server:/etc/openvpn rev1si0n/openvpn ovpn-server-new
+
+Key configurable fields in config.ovpn:
+- VPN network: server 172.27.27.0 255.255.255.0
+- Port: port 1190
+- DNS: push "dhcp-option DNS 114.114.114.114"
+
+CLIENT MANAGEMENT
+-----------------
+
+Create client credentials:
+docker run -it --rm --privileged --net host -v ~/lamda-openvpn-server:/etc/openvpn rev1si0n/openvpn ovpn-client-new myname
+
+Generate client profile:
+docker run -it --rm --privileged --net host -v ~/lamda-openvpn-server:/etc/openvpn rev1si0n/openvpn ovpn-client-profile ovpn myname >myname.ovpn
+
+Revoke client access:
+docker run -it --rm --privileged --net host -v ~/lamda-openvpn-server:/etc/openvpn rev1si0n/openvpn ovpn-client-revoke myname
+
+SERVICE OPERATION
+-----------------
+
+Foreground mode (testing):
+docker run -it --rm --name openvpn-server --privileged --net host -v ~/lamda-openvpn-server:/etc/openvpn rev1si0n/openvpn run
+
+Background mode (production):
+docker run -d --rm --name openvpn-server --privileged --net host -v ~/lamda-openvpn-server:/etc/openvpn rev1si0n/openvpn run
+
+========================================
+22. INTERFACE LOCKING
+========================================
+
+OVERVIEW
+--------
+Control API access through interface locking mechanisms.
+Allows device instances to restrict API usage to prevent unauthorized access.
+
+KEY CONCEPT:
+"The interfaces in this chapter are used to lock all API interfaces, allowing you to
+restrict interfaces to only be used by the current Device instance."
+
+Recommended approach: Acquire lock, maintain through periodic refreshes, release when done.
+
+THREE MAIN FUNCTIONS
+--------------------
+
+1. Acquire Lock
+Command: d._acquire_lock(leaseTime=60)
+- Automatically releases after 60 seconds by default
+- Reentrant capability (subsequent calls refresh existing lock)
+- Warning: Setting excessively high lease times risks permanent device lockout if scripts crash
+
+2. Release Lock
+Command: d._release_lock()
+- Manually relinquishes API lock
+- Allows other clients to acquire access
+
+3. Refresh Lock
+Command: d._refresh_lock(leaseTime=60)
+- Extends lock duration by resetting expiration time
+- Intended for periodic calls to maintain continuous access
+
+BEST PRACTICE:
+Secure sequence:
+1. Acquire lock
+2. Spawn thread to refresh periodically
+3. Release when finished
+
+This approach prevents unexpected disconnections while maintaining safety against
+script failures.
+
+========================================
+23. VERSION HISTORY
+========================================
+
+CURRENT VERSION: 8.28
+---------------------
+Latest release includes:
+- Fixes for local file installation
+- Improvements to Frida ID increment reporting
+- Enhanced TensorFlow inference performance
+- Updated third-party modules
+
+MAJOR VERSION HIGHLIGHTS
+------------------------
+
+Version 8.25:
+- hexedit command functionality
+- Permission loophole fixes
+- On-device AI framework support with tflite-runtime
+
+Version 8.0:
+- Full interface support for multiple applications
+- Shared clipboard functionality in remote desktop
+- Improved compatibility with Android 6.0 through 15
+
+Version 7.50:
+- Complete NoxPlayer emulator compatibility
+- Network subscription service eliminating FRP/OpenVPN requirements
+- Multi-instance app support
+
+Version 5.0:
+- Critical security vulnerabilities addressed
+- TLS support for remote desktop and RPC
+- Python 3.11 client support
+
+FEATURE EVOLUTION
+-----------------
+
+Early versions (3.0 series):
+Established core functionality including ADB integration, SSH support, file operations.
+
+5.x series:
+Introduced significant security improvements and certificate management.
+
+Version 7.x:
+Focused on stability, compatibility with various Android versions and emulators,
+advanced features like Frida integration.
+
+Recent 8.x versions:
+Emphasize AI capabilities and enhanced stealth features.
+
+DEVELOPMENT TRAJECTORY:
+Consistent attention to security, compatibility across diverse Android devices and
+emulators, progressive feature expansion for automation and system manipulation capabilities.
+
+========================================
+BASIC KNOWLEDGE - AUTOMATION FUNDAMENTALS
+========================================
+
+OVERVIEW
+--------
+Android automation fundamentals using FIRERPA.
+Emphasized as superior to alternatives like AutoJS, Appium, and uiautomator2 for
+enterprise-scale automation projects.
+
+KEY AUTOMATION CONCEPTS
+-----------------------
+
+Mobile vs. Web Automation:
+"Mobile automation requires you to have both a mobile phone and a computer, while web
+automation can be done just on your own computer."
+Both use similar principles (element location, clicking, screenshots) but employ
+different tools and locating methods.
+
+TOOL COMPARISON
+---------------
+
+AutoJS:
+Self-controlling, APK-based, suitable for beginners but lacks enterprise scalability.
+
+Appium:
+Cross-platform but "bulky and bloated, very unsuitable for large-scale deployment"
+
+uiautomator2:
+Streamlined but unstable in multi-device scenarios.
+
+BASIC AUTOMATION WORKFLOW
+--------------------------
+Three primary approaches:
+
+1. Man-in-the-Middle Capture:
+   Using certificate installation and proxies for HTTP/HTTPS interception
+
+2. Hook Capture:
+   Requires reverse engineering knowledge
+   Uses Frida scripts to intercept function calls
+
+3. Automation Code:
+   Implements UI interaction logic through selectors
+
+TECHNICAL COMPONENTS
+--------------------
+
+Interface Selectors:
+Elements located using parameters:
+- resourceId
+- text
+- textContains
+- description
+- clickable
+- scrollable
+
+Example syntax: d(text="Agree").click()
+
+Coordinate System:
+- Origin point (0,0) at top-left
+- Extends right and down
+- Regions defined using Bound with parameters: top, left, bottom, right
+- All measured from axis origins
+
+Layout Inspection:
+- Remote desktop provides eye-icon toggle for interactive element inspection
+- Displays properties usable as selector parameters
+- Press CTRL + R to refresh layouts
+
+ANDROID DATA MANAGEMENT
+------------------------
+
+Application Data Location:
+/data/user/0/[package-name]
+
+Contains:
+- Databases directory: SQLite files (mmssms.db for SMS)
+- Shared preferences: XML configuration files
+- Media/files: Additional application assets
+
+Database Support:
+Platform supports reading encrypted databases:
+- WeChat: sqlcipher
+- Enterprise WeChat: aes-128
+- Alipay: sqlcrypto
+(Requires obtaining decryption keys)
+
+ADVANCED ASSISTANCE
+-------------------
+For non-selector-compatible interfaces (games, real-time rendered content):
+FIRERPA provides OCR and image matching solutions using SIFT template matching.
+
+========================================
+ADDITIONAL NOTES AND BEST PRACTICES
+========================================
+
+SECURITY CONSIDERATIONS
+-----------------------
+- Default FIRERPA installation has no authentication
+- Use encryption certificates for any non-trusted network
+- Never expose to public internet without proper security
+- Keep software updated to latest version
+- Protect /data/usr directory (contains configuration and user data)
+
+PERFORMANCE OPTIMIZATION
+------------------------
+- Use image matching scale parameter to optimize performance
+- Server-side OCR/image processing preserves client resources
+- Mobile device performance may limit complex operations
+- Consider custom HTTP backends for multi-device OCR to avoid resource duplication
+
+AUTOMATION BEST PRACTICES
+--------------------------
+- Always refresh layouts (CTRL+R) before element inspection
+- Ensure input method is visible before text input operations
+- Keep monitored apps in foreground during testing
+- Close apps completely (not just taskbar) before packet capture
+- Use dryrun parameter to test binary patches before applying
+- Validate crontab rules with online verification tools
+
+DEBUGGING TIPS
+--------------
+- Monitor logs: grep SCRIPT /data/local/tmp/server.log
+- Check server.log for troubleshooting
+- Verify server is running before API calls
+- Ensure proper root permissions
+- Check timezone configuration for scheduled tasks
+- Verify network connectivity for distributed deployments
+
+LIMITATIONS TO REMEMBER
+-----------------------
+- Remote desktop: English input only (no Chinese characters)
+- Built-in terminal: Cannot install additional PIP/APT packages
+- Virtual Debian: Only one instance at a time
+- Built-in ADB: No JDWP debugging support
+- OCR: Limited to basic operations (exists, click, screenshot)
+- Persistent Frida: One script per app at a time
+- Scheduled tasks: May not run as expected when screen off
+
+RECOMMENDED WORKFLOW
+--------------------
+1. Read documentation sequentially from first chapter
+2. Keep FIRERPA and client libraries updated
+3. Use virtual environment for client installation
+4. Test configurations in safe environment first
+5. Implement proper error handling in automation scripts
+6. Use interface locking for exclusive device access
+7. Monitor script execution through logging
+8. Regular backups of /data/usr directory
+
+========================================
+END OF DOCUMENTATION
+========================================
+
+This comprehensive documentation covers all major aspects of FIRERPAλ for Android
+device management, automation, debugging, and security testing.
+
+For latest updates and additional information, refer to:
+https://device-farm.com/doc/en/
+
+Copyright © 2021-present, firerpa
