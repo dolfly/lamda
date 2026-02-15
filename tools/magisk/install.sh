@@ -8,6 +8,10 @@ if [ -d "/data/adb/ksu/" ]; then
 BB="/data/adb/ksu/bin/busybox"
 fi
 
+if [ -d "/data/adb/ap/" ]; then
+BB="/data/adb/ap/bin/busybox"
+fi
+
 export LATESTARTSERVICE=true
 
 ui_print ".____                       ________      _____    "

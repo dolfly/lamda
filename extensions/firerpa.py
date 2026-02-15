@@ -58,10 +58,6 @@ class FireRpaMcpExtension(BaseMcpExtension):
     def get_deviec_info(self, ctx):
         info = self.device.device_info()
         return to_json_string(MessageToDict(info))
-    @mcp("tool", description="List the package names of installed applications on the device.")
-    def list_installed_application_ids(self, ctx):
-        pkgs = self.device.enumerate_all_pkg_names()
-        return to_json_string(pkgs)
     @mcp("tool", description="Display a toast message on the screen.")
     def show_toast(self, ctx, message: Annotated[str, "The toast message."]):
         result = self.device.show_toast(message)
