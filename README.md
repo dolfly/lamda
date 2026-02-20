@@ -10,9 +10,9 @@
 <img src="https://img.shields.io/badge/Built--in%20MCP-000.svg?logo=anthropic&labelColor=black" />
 </p>
 
-<h6>A next-gen Android automation framework that blends on-device services with AI-ready tool-calls.</h6>
+<h6>An all-in-one next-gen Android automation framework blending robust on-device services with AI-ready agents and extensible tool-calling capabilities.</h6>
 
-<p align="left"><a href="https://device-farm.com/doc/en/">Documentation</a> | <a href="https://device-farm.com/doc/">中文文档</a> | <a href="https://t.me/lamda_dev">TELEGRAM</a> | <a href="https://qm.qq.com/q/zDaX2a594I">QQ Group</a></p>
+<p align="left"><a href="https://device-farm.com/docs/en/">Documentation</a> | <a href="https://device-farm.com/docs/zh/">使用文档</a> | <a href="https://t.me/lamda_dev">TELEGRAM</a> | <a href="https://qm.qq.com/q/zDaX2a594I">QQ Group</a> | <a href="https://device-farm.com/llms.txt">llms.txt</a> | <a href="https://device-farm.com/llms-full.txt">llms-full.txt</a></p>
 
 <h3>Core Capabilities</h3>
 
