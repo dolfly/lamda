@@ -1,5 +1,14 @@
 CHANGELOG
 
+Version 9.25
+-----------
+
+* Fixed semaphore issues
+* Resolved MCP protocol compatibility issues
+* Multi-user support for Remote Desktop
+* Added standardized touch simulation API
+* Compatibility fixes for Android 16
+
 Version 9.20
 -----------
 

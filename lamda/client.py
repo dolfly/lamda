@@ -362,16 +362,16 @@ class FernetCryptor(BaseCryptor):
 class TouchBuilder(object):
     def __init__(self):
         self.s = TouchSequence()
-    def down(self, x, y, pressure=50, track=0):
-        self.s.appendDown(tid=track, x=x, y=y,
-                          pressure=pressure)
+    def down(self, x, y, z=128, contact=0):
+        self.s.appendDown(tid=contact, x=x, y=y,
+                          pressure=z)
         return self
-    def move(self, x, y, pressure=50, track=0):
-        self.s.appendMove(tid=track, x=x, y=y,
-                          pressure=pressure)
+    def move(self, x, y, z=128, contact=0):
+        self.s.appendMove(tid=contact, x=x, y=y,
+                          pressure=z)
         return self
-    def up(self, track=0):
-        self.s.appendUp(tid=track)
+    def up(self, contact=0):
+        self.s.appendUp(tid=contact)
         return self
     def wait(self, mills):
         self.s.appendWait(wait=mills)
@@ -380,6 +380,51 @@ class TouchBuilder(object):
         sequence = TouchSequence()
         sequence.CopyFrom(self.s)
         return sequence
+
+
+class MultiTouchContact:
+    def __init__(self, builder, track):
+        self.builder = builder
+        self.track = track
+    def down(self, x, y, z=128):
+        self.builder.down(x, y, z=z, contact=self.track)
+        return self
+    def move(self, x, y, z=128):
+        self.builder.move(x, y, z=z, contact=self.track)
+        return self
+    def wait(self, mills):
+        self.builder.wait(mills)
+        return self
+    def up(self):
+        self.builder.up(contact=self.track)
+        return self
+
+
+class MultiTouchOpStub:
+    def __init__(self, caller, track=0,
+                                builder=None):
+        self.stub = caller.stub
+        self.builder = builder or TouchBuilder()
+        self.track = track
+    def contact(self, id):
+        return MultiTouchContact(self.builder, id)
+    def wait(self, mills):
+        self.builder.wait(mills)
+    def reset(self):
+        self.builder.s.ClearField("sequence")
+    def record(self):
+        ts = self.stub.recordTouch(protos.Empty())
+        self.builder.s.CopyFrom(ts)
+    def load(self, fpath):
+        ts = self.builder.s.load(fpath)
+        self.builder.s.CopyFrom(ts)
+    def save(self, fpath):
+        return self.builder.s.save(fpath)
+    def perform(self, wait=True):
+        tas = self.builder.build()
+        req = protos.PerformTouchRequest(sequence=tas, wait=wait)
+        r = self.stub.performTouch(req)
+        return r.value
 
 
 class ClientLoggingInterceptor(ClientInterceptor):
@@ -1493,20 +1538,6 @@ class UtilStub(BaseServiceStub):
         req = protos.CertifiRequest(cert=data)
         r = self.stub.uninstallCACertificate(req)
         return r.value
-    def record_touch(self):
-        """
-        录制滑动轨迹
-        """
-        r = self.stub.recordTouch(protos.Empty())
-        return r
-    def perform_touch(self, tas, wait=True):
-        """
-        在设备上进行真实滑动（重放录制的滑动轨迹）
-        """
-        checkArgumentTyp(tas, TouchSequence)
-        req = protos.PerformTouchRequest(sequence=tas, wait=wait)
-        r = self.stub.performTouch(req)
-        return r.value
     def reboot(self):
         """
         重启系统（宿主设备）
@@ -2299,10 +2330,8 @@ class Device(object):
     def application(self, applicationId, user=0):
         return self.stub("Application")(applicationId, user=user)
     # 快速调用: Util
-    def record_touch(self):
-        return self.stub("Util").record_touch()
-    def perform_touch(self, sequence, wait=True):
-        return self.stub("Util").perform_touch(sequence, wait=wait)
+    def touch(self):
+        return MultiTouchOpStub(self.stub("Util"))
     def show_toast(self, text, duration=ToastDuration.TD_SHORT):
         return self.stub("Util").show_toast(text, duration=duration)
     def is_ca_certificate_installed(self, certdata):
