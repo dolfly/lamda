@@ -1,5 +1,21 @@
 CHANGELOG
 
+Version 10.0
+-----------
+
+* Support for background virtual screen automation
+* Gproxy proxy supports specifying outbound network interfaces
+* Support for non-root execution mode (adb shell)
+* Optimized real-time screen mirroring smoothness and audio
+* Support for WebRTC screen mirroring
+* WebUI supports dark mode
+* Support configuring properties via WebUI
+* File upload supports streaming, with a maximum file size of 2GB
+* Redesigned built-in tunnel2 proxy functionality
+* Optimized built-in AI token consumption
+* Optimized event system
+* Optimized service stability, etc.
+
 Version 9.25
 -----------
 

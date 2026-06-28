@@ -29,6 +29,7 @@ message ApplicationRequest {
         GrantType mode          = 3;
         string path             = 4;
         uint32 user             = 5;
+        uint32 display          = 16;
 }
 
 message ApplicationActivityRequest {
@@ -42,6 +43,7 @@ message ApplicationActivityRequest {
         bool   debug            = 8;
         string data             = 9;
         uint32 user             = 10;
+        uint32 display          = 16;
 }
 
 message ApplicationActivityInfo {
@@ -55,10 +57,6 @@ message ApplicationActivityInfo {
         bool   debug            = 8;
         string data             = 9;
         uint32 user             = 10;
-}
-
-message ApplicationActivityInfoList {
-        repeated ApplicationActivityInfo activities = 1;
 }
 
 message ApplicationPermissions {
@@ -79,6 +77,7 @@ message ApplicationInfo {
         string versionName      = 11;
         string activity         = 12;
         uint32 user             = 13;
+        string label            = 14;
 }
 
 message ApplicationProcess {
@@ -86,14 +85,25 @@ message ApplicationProcess {
         string processName = 2;
         int64  uid         = 3;
         int64  pid         = 4;
+        string label       = 5;
 }
 
 message ApplicationProcesses {
         repeated ApplicationProcess processes   = 1;
 }
 
-message ApplicationPkgNames {
-        repeated string names   = 1;
+message InstalledApplicationInfo {
+        string packageName      = 1;
+        string label            = 2;
+        int64  uid              = 3;
+        int64  user             = 4;
+        bool   enabled          = 5;
+        bool   system           = 6;
+        string versionName      = 7;
+}
+
+message InstalledApplications {
+        repeated InstalledApplicationInfo applications   = 1;
 }
 
 message HookRequest {
@@ -105,6 +115,7 @@ message HookRequest {
         uint32 standup          = 6;
         bool spawn              = 7;
         uint32 user             = 8;
+        string process          = 9;
 }
 
 message HookRpcRequest {

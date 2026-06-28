@@ -26,14 +26,13 @@ import public "wifi.proto";
 
 service Application {
     rpc isForeground(ApplicationRequest) returns (Boolean) {}
-    rpc currentApplication(google.protobuf.Empty) returns (ApplicationInfo) {}
-    rpc enumerateAllPkgNames(google.protobuf.Empty) returns (ApplicationPkgNames) {}
+    rpc currentApplication(Integer) returns (ApplicationInfo) {}
+    rpc enumerateInstalledApps(Integer) returns (InstalledApplications) {}
     rpc enumerateRunningProcesses(google.protobuf.Empty) returns (ApplicationProcesses) {}
     rpc queryLaunchActivity(ApplicationRequest) returns (ApplicationActivityInfo) {}
     rpc getPermissions(ApplicationRequest) returns (ApplicationPermissions) {}
     rpc resetApplicationData(ApplicationRequest) returns (Boolean) {}
     rpc deleteApplicationCache(ApplicationRequest) returns (Boolean) {}
-    rpc getLastActivities(Integer) returns (ApplicationActivityInfoList) {}
     rpc startActivity(ApplicationActivityRequest) returns (Boolean) {}
     rpc applicationInfo(ApplicationRequest) returns (ApplicationInfo) {}
     rpc startApplication(ApplicationRequest) returns (Boolean) {}
@@ -47,8 +46,6 @@ service Application {
     rpc isPermissionGranted(ApplicationRequest) returns (Boolean) {}
     rpc isInstalled(ApplicationRequest) returns (Boolean) {}
 
-    rpc addToDozeModeWhiteList(ApplicationRequest) returns (Boolean) {}
-    rpc removeFromDozeModeWhiteList(ApplicationRequest) returns (Boolean) {}
     rpc getIdentifierByLabel(String) returns (String) {}
 
     rpc callScript(HookRpcRequest) returns (HookRpcResponse) {}
@@ -126,7 +123,7 @@ service UiAutomator {
     rpc isScreenLocked(google.protobuf.Empty) returns (Boolean) {}
     rpc setClipboard(ClipboardRequest) returns (Boolean) {}
     rpc getClipboard(google.protobuf.Empty) returns (String) {}
-    rpc freezeRotation(Boolean) returns (Boolean) {}
+    rpc freezeRotation(FreezeRotationRequest) returns (Boolean) {}
     rpc setOrientation(OrientationRequest) returns (Boolean) {}
     rpc pressKey(PressKeyRequest) returns (Boolean) {}
     rpc pressKeyCode(PressKeyRequest) returns (Boolean) {}
@@ -134,7 +131,7 @@ service UiAutomator {
     rpc deviceInfo(google.protobuf.Empty) returns (DeviceInfo) {}
 
     rpc takeScreenshot(TakeScreenshotRequest) returns (Bytes) {}
-    rpc dumpWindowHierarchy(Boolean) returns (Bytes) {}
+    rpc dumpWindowHierarchy(DumpWindowHierarchyRequest) returns (Bytes) {}
     rpc waitForIdle(Integer) returns (Boolean) {}
 
     rpc selectorTakeScreenshot(SelectorTakeScreenshotRequest) returns (Bytes) {}
@@ -146,6 +143,7 @@ service UiAutomator {
     rpc selectorClick(SelectorClickRequest) returns (Boolean) {}
     rpc selectorClickExists(SelectorClickRequest) returns (Boolean) {}
     rpc selectorLongClick(SelectorClickRequest) returns (Boolean) {}
+    rpc pointLongClick(ClickPointRequest) returns (Boolean) {}
 
     rpc selectorExists(SelectorOnlyRequest) returns (Boolean) {}
     rpc getLastToast(google.protobuf.Empty) returns (ToastInfo) {}
@@ -174,18 +172,29 @@ service UiAutomator {
     rpc selectorPinchOut(SelectorPinchRequest) returns (Boolean) {}
     rpc selectorPinchIn(SelectorPinchRequest) returns (Boolean) {}
 
-    rpc setWatcherLoopEnabled(Boolean) returns (Boolean) {}
-    rpc getWatcherLoopEnabled(google.protobuf.Empty) returns (Boolean) {}
-    rpc getWatcherTriggeredCount(String) returns (Integer) {}
-    rpc resetWatcherTriggeredCount(String) returns (Boolean) {}
+    rpc setWatcherLoopEnabled(WatcherControlRequest) returns (Boolean) {}
+    rpc getWatcherLoopEnabled(WatcherControlRequest) returns (Boolean) {}
+    rpc setWatcherEnable(WatcherControlRequest) returns (Boolean) {}
+    rpc getWatcherEnable(WatcherControlRequest) returns (Boolean) {}
+    rpc removeWatcher(WatcherControlRequest) returns (Boolean) {}
+    rpc removeAllWatchers(WatcherControlRequest) returns (Boolean) {}
+    rpc getEnabledWatchers(WatcherControlRequest) returns (WatcherInfoList) {}
+    rpc getWatchers(WatcherControlRequest) returns (WatcherInfoList) {}
+    rpc getWatcherTriggeredCount(WatcherControlRequest) returns (Integer) {}
+    rpc resetWatcherTriggeredCount(WatcherControlRequest) returns (Boolean) {}
+    rpc registerClickUiObjectWatcher(WatcherControlRequest) returns (Boolean) {}
+    rpc registerPressKeysWatcher(WatcherControlRequest) returns (Boolean) {}
+    rpc registerNoneOpWatcher(WatcherControlRequest) returns (Boolean) {}
 
-    rpc removeWatcher(String) returns (Boolean) {}
-    rpc getAppliedWatchers(google.protobuf.Empty) returns (WatcherNameList) {}
-
-    rpc registerClickUiObjectWatcher(WatcherRegistRequest) returns (Boolean) {}
-    rpc registerPressKeysWatcher(WatcherRegistRequest) returns (Boolean) {}
-    rpc registerNoneOpWatcher(WatcherRegistRequest) returns (Boolean) {}
     rpc findSimilarImage(FindImageRequest) returns (FindImageResponse) {}
+
+    rpc listAllDisplays(google.protobuf.Empty) returns (DisplayInfoList) {}
+    rpc createVirtualDisplay(CreateVirtualDisplayRequest) returns (Integer) {}
+    rpc getDisplayInfo(Integer) returns (DisplayInfo) {}
+    rpc releaseVirtualDisplay(Integer) returns (Boolean) {}
+
+    rpc setDisplayImePolicy(ImePolicyRequest) returns (Boolean) {}
+    rpc getDisplayImePolicy(Integer) returns (Integer) {}
 }
 
 service Wifi {

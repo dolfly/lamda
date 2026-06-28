@@ -46,7 +46,7 @@ from . import __version__
 from . types import AttributeDict, BytesIO
 from . exceptions import (UnHandledException, DuplicateEntryError,
                           InvalidArgumentError, UiObjectNotFoundException,
-                          IllegalStateException)
+                          IllegalStateException, InvalidOperationError)
 from . import exceptions
 
 handler = logging.StreamHandler()
@@ -91,6 +91,7 @@ __all__ = [
                 "TouchBuilder",
                 "ScriptRuntime",
                 "DataEncode",
+                "ImePolicy",
                 "AudioStreamType",
                 "PlayAudioProfile",
                 "ApplicationInfo",
@@ -111,10 +112,6 @@ __all__ = [
 
 def getXY(p):
     return p.x, p.y
-
-def checkDupEntry(a, entries):
-    if a in entries:
-        raise DuplicateEntryError(a)
 
 def checkArgumentTyp(a, types):
     if not isinstance(a, types):
@@ -206,6 +203,7 @@ GproxyType = protos.GproxyType
 GrantType = protos.GrantType
 ScriptRuntime = protos.ScriptRuntime
 DataEncode = protos.DataEncode
+ImePolicy = protos.ImePolicy
 
 Group = protos.Group
 Key = protos.Key
@@ -288,12 +286,12 @@ Bound.__eq__ = equal
 
 
 def load_proto(name):
-    """ 载入包下面的相关 proto 文件 """
+    """Load related proto files from the package."""
     return grpc.protos_and_services(name)
 
 
 def to_dict(prot):
-    """ 将 proto 返回值转换为字典 """
+    """Convert a proto response to a dict."""
     r = MessageToJson(prot, preserving_proto_field_name=True)
     return json.loads(r)
 
@@ -432,7 +430,7 @@ class ClientLoggingInterceptor(ClientInterceptor):
         return "{:.1024}...".format(s) if len(s) > 1024 else s
     def intercept(self, function, request, details):
         """
-        日志记录各个接口的调用及参数
+        Log API calls and arguments.
         """
         displayable = isinstance(request, Message)
         args = MessageToDict(request) if displayable else "-"
@@ -461,7 +459,7 @@ class ClientSessionMetadataInterceptor(ClientInterceptor):
 class GrpcRemoteExceptionInterceptor(ClientInterceptor):
     def intercept(self, function, request, details):
         """
-        处理远程调用中发生的异常并抛出本地异常
+        Handle remote call errors and raise local exceptions.
         """
         res = function(request, details)
         self.raise_remote_exception(res)
@@ -483,10 +481,11 @@ class GrpcRemoteExceptionInterceptor(ClientInterceptor):
 
 
 class ObjectUiAutomatorOpStub:
-    def __init__(self, caller, selector):
+    def __init__(self, caller, selector, display):
         """
-        UiAutomator 子接口，用来模拟出实例的意味
+        UiAutomator sub-interface that behaves like an instance.
         """
+        self.display = display
         self._selector = selector
         self.selector = Selector(**selector)
         self.stub = caller.stub
@@ -494,27 +493,28 @@ class ObjectUiAutomatorOpStub:
     def __str__(self):
         selector = ", ".join(["{}={}".format(k, v) \
                         for k, v in self._selector.items()])
-        return "Object: {}".format(selector)
+        return "Object@{}: {}".format(self.display, selector)
     __repr__ = __str__
     def child(self, **selector):
         """
-        匹配选择器里面的子节点
+        Match child nodes within the selector.
         """
         selector = self.selector.child(**selector)
         s = MessageToDict(selector, preserving_proto_field_name=True)
         return self.__class__(self.caller, s)
     def sibling(self, **selector):
         """
-        匹配选择器的同级节点
+        Match sibling nodes of the selector.
         """
         selector = self.selector.sibling(**selector)
         s = MessageToDict(selector, preserving_proto_field_name=True)
         return self.__class__(self.caller, s)
     def take_screenshot(self, quality=100):
         """
-        对选择器选中元素进行截图
+        Screenshot the selected element.
         """
-        req = protos.SelectorTakeScreenshotRequest(selector=self.selector,
+        req = protos.SelectorTakeScreenshotRequest(display=self.display,
+                                                   selector=self.selector,
                                                    quality=quality)
         r = self.stub.selectorTakeScreenshot(req)
         return BytesIO(r.value)
@@ -522,62 +522,71 @@ class ObjectUiAutomatorOpStub:
         return self.take_screenshot(quality=quality)
     def get_text(self):
         """
-        获取选择器选中输入控件中的文本
+        Get text from the selected input field.
         """
-        req = protos.SelectorOnlyRequest(selector=self.selector)
+        req = protos.SelectorOnlyRequest(display=self.display,
+                                         selector=self.selector)
         r = self.stub.selectorGetText(req)
         return r.value
     def clear_text_field(self):
         """
-        清空选择器选中输入控件中的文本
+        Clear text in the selected input field.
         """
-        req = protos.SelectorOnlyRequest(selector=self.selector)
+        req = protos.SelectorOnlyRequest(display=self.display,
+                                         selector=self.selector)
         r = self.stub.selectorClearTextField(req)
         return r.value
     def set_text(self, text):
         """
-        向选择器选中输入控件中填入文本
+        Fill text into the selected input field.
         """
-        req = protos.SelectorSetTextRequest(selector=self.selector,
+        req = protos.SelectorSetTextRequest(display=self.display,
+                                            selector=self.selector,
                                             text=text)
         r = self.stub.selectorSetText(req)
         return r.value
     def click(self, corner=Corner.COR_CENTER):
         """
-        点击选择器选中的控件
+        Click the selected widget.
         """
-        req = protos.SelectorClickRequest(selector=self.selector,
+        req = protos.SelectorClickRequest(display=self.display,
+                                          selector=self.selector,
                                           corner=corner)
         r = self.stub.selectorClick(req)
         return r.value
     def click_exists(self, corner=Corner.COR_CENTER):
         """
-        点击选择器选中的控件（不存在将不会产生异常）
+        Click the selected widget without raising if missing.
         """
-        req = protos.SelectorClickRequest(selector=self.selector,
+        req = protos.SelectorClickRequest(display=self.display,
+                                          selector=self.selector,
                                           corner=corner)
         r = self.stub.selectorClickExists(req)
         return r.value
-    def long_click(self, corner=Corner.COR_CENTER):
+    def long_click(self, corner=Corner.COR_CENTER, timeout=0):
         """
-        长按选择器选中的控件
+        Long-click the selected widget.
         """
-        req = protos.SelectorClickRequest(selector=self.selector,
-                                          corner=corner)
+        req = protos.SelectorClickRequest(display=self.display,
+                                          selector=self.selector,
+                                          corner=corner,
+                                          timeout=timeout)
         r = self.stub.selectorLongClick(req)
         return r.value
     def exists(self):
         """
-        是否存在选择器选中的控件
+        Check whether the selected widget exists.
         """
-        req = protos.SelectorOnlyRequest(selector=self.selector)
+        req = protos.SelectorOnlyRequest(display=self.display,
+                                         selector=self.selector)
         r = self.stub.selectorExists(req)
         return r.value
     def info(self):
         """
-        获取选择器选中控件的信息
+        Get info for the selected widget.
         """
-        req = protos.SelectorOnlyRequest(selector=self.selector)
+        req = protos.SelectorOnlyRequest(display=self.display,
+                                         selector=self.selector)
         return self.stub.selectorObjInfo(req)
     def _new_object(self, **kwargs):
         selector = copy.deepcopy(self._selector)
@@ -637,20 +646,21 @@ class ObjectUiAutomatorOpStub:
         return self._new_object(instance=idx)
     def get(self, idx):
         """
-        获取匹配的第 N 个索引的元素
+        Get the nth matched element.
         """
         return self.instance(idx)
     def __iter__(self):
         """
-        遍历所有符合选择器条件的元素实例
+        Iterate over all elements matching the selector.
         """
         yield from [self.instance(i) for i in \
                             range(self.count())]
     def count(self):
         """
-        获取选择器选中控件的数量
+        Get the number of selected widgets.
         """
-        req = protos.SelectorOnlyRequest(selector=self.selector)
+        req = protos.SelectorOnlyRequest(display=self.display,
+                                         selector=self.selector)
         r = self.stub.selectorCount(req)
         return r.value
     def _set_target_Point(self, req, target):
@@ -659,149 +669,164 @@ class ObjectUiAutomatorOpStub:
         req.target.CopyFrom(target)
     def drag_to(self, target, step=32):
         """
-        将选择器选中的控件拖动到另一个选择器或者点上
+        Drag the selected widget to another selector or point.
         """
         checkArgumentTyp(target, (Point, _Selector))
         func = "_set_target_{}".format(target.DESCRIPTOR.name)
-        req = protos.SelectorDragToRequest(selector=self.selector,
+        req = protos.SelectorDragToRequest(display=self.display,
+                                           selector=self.selector,
                                            step=step)
         getattr(self, func)(req, target)
         r = self.stub.selectorDragTo(req)
         return r.value
     def wait_for_exists(self, timeout):
         """
-        等待选择器选中控件出现
+        Wait for the selected widget to appear.
         """
-        req = protos.SelectorWaitRequest(selector=self.selector,
+        req = protos.SelectorWaitRequest(display=self.display,
+                                         selector=self.selector,
                                          timeout=timeout)
         r = self.stub.selectorWaitForExists(req)
         return r.value
     def wait_until_gone(self, timeout):
         """
-        等待选择器选中控件消失
+        Wait for the selected widget to disappear.
         """
-        req = protos.SelectorWaitRequest(selector=self.selector,
+        req = protos.SelectorWaitRequest(display=self.display,
+                                         selector=self.selector,
                                          timeout=timeout)
         r = self.stub.selectorWaitUntilGone(req)
         return r.value
     def swipe(self, direction=Direction.DIR_UP, step=32):
         """
-        在选择器选中的元素上进行滑动操作
+        Swipe on the selected element.
         """
-        req = protos.SelectorSwipeRequest(selector=self.selector,
+        req = protos.SelectorSwipeRequest(display=self.display,
+                                          selector=self.selector,
                                           direction=direction,
                                           step=step)
         r = self.stub.selectorSwipe(req)
         return r.value
     def pinch_in(self, percent, step=16):
         """
-        双指捏紧（缩小）
+        Pinch in.
         """
-        req = protos.SelectorPinchRequest(selector=self.selector,
+        req = protos.SelectorPinchRequest(display=self.display,
+                                          selector=self.selector,
                                          percent=percent, step=step)
         r = self.stub.selectorPinchIn(req)
         return r.value
     def pinch_out(self, percent, step=16):
         """
-        双指放开（放大）
+        Pinch out.
         """
-        req = protos.SelectorPinchRequest(selector=self.selector,
+        req = protos.SelectorPinchRequest(display=self.display,
+                                          selector=self.selector,
                                           percent=percent, step=step)
         r = self.stub.selectorPinchOut(req)
         return r.value
     def scroll_to(self, target, is_vertical=True):
         """
-        滚动 scrollable 直到匹配目标元素的选择器
+        Scroll a scrollable view until the target selector matches.
         """
         checkArgumentTyp(target, _Selector)
-        req = protos.SelectorScrollRequest(selector=self.selector,
+        req = protos.SelectorScrollRequest(display=self.display,
+                                           selector=self.selector,
                                            vertical=is_vertical,
                                            target=target)
         r = self.stub.selectorScrollTo(req)
         return r.value
     def _fling_forward(self, is_vertical=True):
-        req = protos.SelectorFlingRequest(selector=self.selector,
+        req = protos.SelectorFlingRequest(display=self.display,
+                                          selector=self.selector,
                                           vertical=is_vertical)
         r = self.stub.selectorFlingForward(req)
         return r.value
     def _fling_backward(self, is_vertical=True):
-        req = protos.SelectorFlingRequest(selector=self.selector,
+        req = protos.SelectorFlingRequest(display=self.display,
+                                          selector=self.selector,
                                           vertical=is_vertical)
         r = self.stub.selectorFlingBackward(req)
         return r.value
     def _fling_to_end(self, max_swipes, is_vertical=True):
-        req = protos.SelectorFlingRequest(selector=self.selector,
+        req = protos.SelectorFlingRequest(display=self.display,
+                                          selector=self.selector,
                                           maxSwipes=max_swipes,
                                           vertical=is_vertical)
         r = self.stub.selectorFlingToEnd(req)
         return r.value
     def _fling_to_beginning(self, max_swipes, is_vertical=True):
-        req = protos.SelectorFlingRequest(selector=self.selector,
+        req = protos.SelectorFlingRequest(display=self.display,
+                                          selector=self.selector,
                                           maxSwipes=max_swipes,
                                           vertical=is_vertical)
         r = self.stub.selectorFlingToBeginning(req)
         return r.value
     def fling_from_top_to_bottom(self):
         """
-        在选择器选中元素上进行从上至下阅读式滑动（单次）
+        Perform one top-to-bottom reading swipe on the selected element.
         """
         return self._fling_backward(is_vertical=True)
     def fling_from_bottom_to_top(self):
         """
-        在选择器选中元素上进行从下至上阅读式滑动（单次）
+        Perform one bottom-to-top reading swipe on the selected element.
         """
         return self._fling_forward(is_vertical=True)
     def fling_from_left_to_right(self):
         """
-        在选择器选中元素上进行从左至右阅读式滑动（单次）
+        Perform one left-to-right reading swipe on the selected element.
         """
         return self._fling_backward(is_vertical=False)
     def fling_from_right_to_left(self):
         """
-        在选择器选中元素上进行从右至左阅读式滑动（单次）
+        Perform one right-to-left reading swipe on the selected element.
         """
         return self._fling_forward(is_vertical=False)
     def fling_from_top_to_bottom_to_end(self, max_swipes):
         """
-        在选择器选中元素上进行从上至下阅读式滑动直至无法滑动或达到 max_swipes 次
+        Swipe top-to-bottom until scrolling stops or max_swipes is reached.
         """
         return self._fling_to_beginning(max_swipes, is_vertical=True)
     def fling_from_bottom_to_top_to_end(self, max_swipes):
         """
-        在选择器选中元素上进行从下至上阅读式滑动直至无法滑动或达到 max_swipes 次
+        Swipe bottom-to-top until scrolling stops or max_swipes is reached.
         """
         return self._fling_to_end(max_swipes, is_vertical=True)
     def fling_from_left_to_right_to_end(self, max_swipes):
         """
-        在选择器选中元素上进行从左至右阅读式滑动直至无法滑动或达到 max_swipes 次
+        Swipe left-to-right until scrolling stops or max_swipes is reached.
         """
         return self._fling_to_beginning(max_swipes, is_vertical=False)
     def fling_from_right_to_left_to_end(self, max_swipes):
         """
-        在选择器选中元素上进行从右至左阅读式滑动直至无法滑动或达到 max_swipes 次
+        Swipe right-to-left until scrolling stops or max_swipes is reached.
         """
         return self._fling_to_end(max_swipes, is_vertical=False)
     def _scroll_forward(self, step, is_vertical=True):
-        req = protos.SelectorScrollRequest(selector=self.selector,
+        req = protos.SelectorScrollRequest(display=self.display,
+                                           selector=self.selector,
                                            vertical=is_vertical,
                                            step=step)
         r = self.stub.selectorScrollForward(req)
         return r.value
     def _scroll_backward(self, step, is_vertical=True):
-        req = protos.SelectorScrollRequest(selector=self.selector,
+        req = protos.SelectorScrollRequest(display=self.display,
+                                           selector=self.selector,
                                            vertical=is_vertical,
                                            step=step)
         r = self.stub.selectorScrollBackward(req)
         return r.value
     def _scroll_to_end(self, max_swipes, step, is_vertical=True):
-        req = protos.SelectorScrollRequest(selector=self.selector,
+        req = protos.SelectorScrollRequest(display=self.display,
+                                           selector=self.selector,
                                            maxSwipes=max_swipes,
                                            vertical=is_vertical,
                                            step=step)
         r = self.stub.selectorScrollToEnd(req)
         return r.value
     def _scroll_to_beginning(self, max_swipes, step, is_vertical=True):
-        req = protos.SelectorScrollRequest(selector=self.selector,
+        req = protos.SelectorScrollRequest(display=self.display,
+                                           selector=self.selector,
                                            maxSwipes=max_swipes,
                                            vertical=is_vertical,
                                            step=step)
@@ -809,233 +834,244 @@ class ObjectUiAutomatorOpStub:
         return r.value
     def scroll_from_top_to_bottom(self, step):
         """
-        在选择器选中元素上进行从上至下普通滑动
+        Perform a normal top-to-bottom swipe on the selected element.
         """
         return self._scroll_backward(step, is_vertical=True)
     def scroll_from_bottom_to_top(self, step):
         """
-        在选择器选中元素上进行从下至上普通滑动
+        Perform a normal bottom-to-top swipe on the selected element.
         """
         return self._scroll_forward(step, is_vertical=True)
     def scroll_from_left_to_right(self, step):
         """
-        在选择器选中元素上进行从左至右普通滑动
+        Perform a normal left-to-right swipe on the selected element.
         """
         return self._scroll_backward(step, is_vertical=False)
     def scroll_from_right_to_left(self, step):
         """
-        在选择器选中元素上进行从右至左普通滑动
+        Perform a normal right-to-left swipe on the selected element.
         """
         return self._scroll_forward(step, is_vertical=False)
     def scroll_from_top_to_bottom_to_end(self, max_swipes, step):
         """
-        在选择器选中元素上进行从上至下普通滑动直至无法滑动或达到 max_swipes 次
+        Repeat normal top-to-bottom swipes until scrolling stops or max_swipes is reached.
         """
         return self._scroll_to_beginning(max_swipes, step, is_vertical=True)
     def scroll_from_bottom_to_top_to_end(self, max_swipes, step):
         """
-        在选择器选中元素上进行从下至上普通滑动直至无法滑动或达到 max_swipes 次
+        Repeat normal bottom-to-top swipes until scrolling stops or max_swipes is reached.
         """
         return self._scroll_to_end(max_swipes, step, is_vertical=True)
     def scroll_from_left_to_right_to_end(self, max_swipes, step):
         """
-        在选择器选中元素上进行从左至右普通滑动直至无法滑动或达到 max_swipes 次
+        Repeat normal left-to-right swipes until scrolling stops or max_swipes is reached.
         """
         return self._scroll_to_beginning(max_swipes, step, is_vertical=False)
     def scroll_from_right_to_left_to_end(self, max_swipes, step):
         """
-        在选择器选中元素上进行从右至左普通滑动直至无法滑动或达到 max_swipes 次
+        Repeat normal right-to-left swipes until scrolling stops or max_swipes is reached.
         """
         return self._scroll_to_end(max_swipes, step, is_vertical=False)
 
 
 class UiAutomatorStub(BaseServiceStub):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, display=0, **kwargs):
+        self.display = display
         super(UiAutomatorStub, self).__init__(*args, **kwargs)
-        self.watchers = defaultdict(dict)
     def device_info(self):
         """
-        获取设备基本/分辨率等信息
+        Get device and display info.
         """
         r = self.stub.deviceInfo(protos.Empty())
         return r
     def set_watcher_loop_enabled(self, enabled):
         """
-        设置是否启用设备上的 watcher UI 检测
+        Enable or disable watcher UI checks on the device.
         """
-        req = protos.Boolean(value=enabled)
+        req = protos.WatcherControlRequest(display=self.display,
+                                           enable=enabled)
         r = self.stub.setWatcherLoopEnabled(req)
         return r.value
     def get_watcher_loop_enabled(self):
         """
-        获取是否启用设备上的 watcher UI 检测
+        Check whether watcher UI checks are enabled.
         """
-        r = self.stub.getWatcherLoopEnabled(protos.Empty())
+        req = protos.WatcherControlRequest(display=self.display)
+        r = self.stub.getWatcherLoopEnabled(req)
         return r.value
     def get_watcher_triggered_count(self, name):
         """
-        获取这个 watcher 被触发的次数
+        Get how many times this watcher was triggered.
         """
-        req = protos.String(value=name)
+        req = protos.WatcherControlRequest(display=self.display,
+                                           name=name)
         r = self.stub.getWatcherTriggeredCount(req)
         return r.value
     def reset_watcher_triggered_count(self, name):
         """
-        重置这个 watcher 的触发次数为 0
+        Reset this watcher's trigger count to 0.
         """
-        req = protos.String(value=name)
+        req = protos.WatcherControlRequest(display=self.display,
+                                           name=name)
         r = self.stub.resetWatcherTriggeredCount(req)
         return r.value
-    def get_applied_watchers(self):
+    def get_enabled_watchers(self):
         """
-        获取已经在系统应用的 watcher 名称列表
+        Get enabled watchers applied on the system.
         """
-        r = self.stub.getAppliedWatchers(protos.Empty())
-        return r.watchers
-    # 注意：下面这些 watcher 实现不是安全的
-    # 注册时都是统一存储到本地实例的变量中，直至 enable 时才会应用至服务端
-    # 这样做的原因是让你知道你都干了什么，过多的 watcher 会影响性能
+        req = protos.WatcherControlRequest(display=self.display)
+        return self.stub.getEnabledWatchers(req).watchers
+    def get_watchers(self):
+        """
+        Get registered watchers applied on the system.
+        """
+        req = protos.WatcherControlRequest(display=self.display)
+        return self.stub.getWatchers(req).watchers
     def remove_all_watchers(self):
-        """
-        移除所有应用/未应用的 watcher
-        """
-        for name in list(self.get_applied_watchers()):
-            self.remove_watcher(name)
-        for name in list(self.watchers.keys()):
-            self.remove_watcher(name)
+        req = protos.WatcherControlRequest(display=self.display)
+        r = self.stub.removeAllWatchers(req)
+        return r.value
     def register_click_target_selector_watcher(self, name, conditions,
                                                target):
         """
-        注册一个满足条件点击 selector 的 watcher
+        Register a watcher that clicks a selector when matched.
         """
-        checkDupEntry(name, self.watchers)
-        req = protos.WatcherRegistRequest(name=name, selectors=conditions,
-                                          target=target)
-        self.watchers[name]["enabled"] = False
-        func = lambda: self.stub.registerClickUiObjectWatcher(req).value
-        self.watchers[name]["enable"] = func
+        req = protos.WatcherControlRequest(display=self.display,
+                                           name=name, selectors=conditions,
+                                           target=target)
+        r = self.stub.registerClickUiObjectWatcher(req)
+        return r.value
     def register_press_key_watcher(self, name, conditions, key):
         """
-        注册一个满足条件点击 key 的 watcher
+        Register a watcher that presses a key when matched.
         """
-        checkDupEntry(name, self.watchers)
-        req = protos.WatcherRegistRequest(name=name, selectors=conditions,
-                                          key=key)
-        self.watchers[name]["enabled"] = False
-        func = lambda: self.stub.registerPressKeysWatcher(req).value
-        self.watchers[name]["enable"] = func
+        req = protos.WatcherControlRequest(display=self.display,
+                                           name=name, selectors=conditions,
+                                           key=key)
+        r = self.stub.registerPressKeysWatcher(req)
+        return r.value
     def register_none_op_watcher(self, name, conditions):
         """
-        注册一个满足条件无操作的 watcher（用来检测是否出现过某个场景）
+        Register a watcher that does nothing when matched.
         """
-        checkDupEntry(name, self.watchers)
-        req = protos.WatcherRegistRequest(name=name, selectors=conditions)
-        self.watchers[name]["enabled"] = False
-        func = lambda: self.stub.registerNoneOpWatcher(req).value
-        self.watchers[name]["enable"] = func
-    def _remove_watcher(self, name):
-        return self.stub.removeWatcher(protos.String(value=name)).value
+        req = protos.WatcherControlRequest(display=self.display,
+                                           name=name, selectors=conditions)
+        r = self.stub.registerNoneOpWatcher(req)
+        return r.value
     def set_watcher_enabled(self, name, enable):
         """
-        设置是否启用此 watcher
+        Enable or disable this watcher.
         """
-        if name not in self.watchers:
-            return False
-        self.watchers[name]["enabled"] = enable
-        if self.watchers[name]["enabled"]:
-            return self.watchers[name]["enable"]()
-        return self._remove_watcher(name)
+        req = protos.WatcherControlRequest(display=self.display,
+                                           name=name, enable=enable)
+        r = self.stub.setWatcherEnable(req)
+        return r.value
     def get_watcher_enabled(self, name):
         """
-        获取此 watcher 是否启用
+        Check whether this watcher is enabled.
         """
-        return self.watchers.get(name, {}).get("enable")
+        req = protos.WatcherControlRequest(display=self.display,
+                                           name=name)
+        r = self.stub.getWatcherEnable(req)
+        return r.value
     def get_last_toast(self):
         """
-        获取系统中最后一个 toast 消息
+        Get the last toast message.
         """
         r = self.stub.getLastToast(protos.Empty())
         return r
     def remove_watcher(self, name):
         """
-        移除一个 watcher
+        Remove a watcher.
         """
-        self.watchers.pop(name, None)
-        return self._remove_watcher(name)
+        req = protos.WatcherControlRequest(display=self.display,
+                                           name=name)
+        r = self.stub.removeWatcher(req)
+        return r.value
+    def long_click(self, point, timeout=0):
+        req = protos.ClickPointRequest(display=self.display,
+                                       point=point,
+                                       timeout=timeout)
+        r = self.stub.pointLongClick(req)
+        return r.value
     def click(self, point):
         """
-        点击屏幕中的某个点(Point)
+        Click a point on the screen.
         """
-        req = protos.ClickPointRequest(point=point)
+        req = protos.ClickPointRequest(display=self.display,
+                                       point=point)
         r = self.stub.click(req)
         return r.value
     def drag(self, A, B, step=32):
         """
-        从点(Point) A 拖动到点(Point) B
+        Drag from point A to point B.
         """
-        req = protos.DragPointRequest(A=A, B=B, step=step)
+        req = protos.DragPointRequest(display=self.display,
+                                      A=A, B=B, step=step)
         r = self.stub.drag(req)
         return r.value
     def swipe(self, A, B, step=32):
         """
-        从点(Point) A 滑动到点(Point) B
+        Swipe from point A to point B.
         """
-        req = protos.SwipePointRequest(A=A, B=B, step=step)
+        req = protos.SwipePointRequest(display=self.display,
+                                       A=A, B=B, step=step)
         r = self.stub.swipe(req)
         return r.value
     def swipe_points(self, *points, step=32):
         """
-        滑动一个点(Point)序列（超过两个点）
+        Swipe across a sequence of points.
         """
-        req = protos.SwipePointsRequest(points=points, step=step)
+        req = protos.SwipePointsRequest(display=self.display,
+                                        points=points, step=step)
         r = self.stub.swipePoints(req)
         return r.value
     def open_notification(self):
         """
-        打开通知栏（状态栏）
+        Open the notification shade.
         """
         r = self.stub.openNotification(protos.Empty())
         return r.value
     def open_quick_settings(self):
         """
-        打开设置栏（状态栏）
+        Open the quick settings shade.
         """
         r = self.stub.openQuickSettings(protos.Empty())
         return r.value
     def wake_up(self):
         """
-        唤醒设备（点亮屏幕）
+        Wake the device.
         """
         r = self.stub.wakeUp(protos.Empty())
         return r.value
     def sleep(self):
         """
-        关闭设备（熄灭屏幕）
+        Sleep the device.
         """
         r = self.stub.sleep(protos.Empty())
         return r.value
     def is_screen_on(self):
         """
-        设备是否处于唤醒状态
+        Check whether the device is awake.
         """
         r = self.stub.isScreenOn(protos.Empty())
         return r.value
     def is_screen_locked(self):
         """
-        设备屏幕是否已经锁定
+        Check whether the screen is locked.
         """
         r = self.stub.isScreenLocked(protos.Empty())
         return r.value
     def set_clipboard(self, text):
         """
-        设置剪切板文字
+        Set clipboard text.
         """
         req = protos.ClipboardRequest(ID=str(uuid.uuid4()), value=text)
         r = self.stub.setClipboard(req)
         return r.value
     def get_clipboard(self):
         """
-        获取剪切板文字（小于 Android10）
+        Get clipboard text before Android 10.
         """
         r = self.stub.getClipboard(protos.Empty())
         return r.value
@@ -1047,7 +1083,7 @@ class UiAutomatorStub(BaseServiceStub):
                            scale=1.0, area=FindImageArea.FIA_WHOLE_SCREEN,
                            method=FindImageMethod.FIM_TEMPLATE):
         """
-        根据提供的目标图片从屏幕中获取相似图片位置
+        Find similar image positions on screen from a target image.
         """
         req = protos.FindImageRequest()
         checkArgumentTyp(area, (Bound, int))
@@ -1056,6 +1092,7 @@ class UiAutomatorStub(BaseServiceStub):
         func = "_set_target_{}".format(name)
         getattr(self, func)(req, area)
         req.method = method
+        req.display = self.display
         req.distance = distance
         req.threshold = threshold
         req.scale = scale
@@ -1064,37 +1101,42 @@ class UiAutomatorStub(BaseServiceStub):
         return r.bounds
     def freeze_rotation(self, freeze=True):
         """
-        锁定屏幕旋转
+        Lock screen rotation.
         """
-        r = self.stub.freezeRotation(protos.Boolean(value=freeze))
+        req = protos.FreezeRotationRequest(freeze=freeze,
+                                           display=self.display)
+        r = self.stub.freezeRotation(req)
         return r.value
     def set_orientation(self, orien=Orientation.ORIEN_NATURE):
         """
-        设置屏幕旋转方向
+        Set screen rotation.
         """
-        req = protos.OrientationRequest(orientation=orien)
+        req = protos.OrientationRequest(orientation=orien,
+                                        display=self.display)
         r = self.stub.setOrientation(req)
         return r.value
     def press_key(self, key):
         """
-        按下设备物理按键（HOME/VOLUME/BACK)
+        Press a hardware key such as HOME, VOLUME, or BACK.
         """
-        req = protos.PressKeyRequest(key=key)
+        req = protos.PressKeyRequest(display=self.display, key=key)
         r = self.stub.pressKey(req)
         return r.value
     def press_keycode(self, code, meta=0):
         """
-        通过 Keycode(整数)按下未定义的按键
+        Press an undefined key by integer keycode.
         ref: https://developer.android.com/reference/android/view/KeyEvent
         """
-        req = protos.PressKeyRequest(code=code, meta=meta)
+        req = protos.PressKeyRequest(display=self.display,
+                                     code=code, meta=meta)
         r = self.stub.pressKeyCode(req)
         return r.value
     def take_screenshot(self, quality, bound=None):
         """
-        截取全屏幕截图
+        Capture a full-screen screenshot.
         """
-        req = protos.TakeScreenshotRequest(quality=quality,
+        req = protos.TakeScreenshotRequest(display=self.display,
+                                           quality=quality,
                                            bound=bound)
         r = self.stub.takeScreenshot(req)
         return BytesIO(r.value)
@@ -1102,19 +1144,121 @@ class UiAutomatorStub(BaseServiceStub):
         return self.take_screenshot(quality, bound=bound)
     def dump_window_hierarchy(self, compressed=False):
         """
-        获取屏幕界面布局 XML 文档
+        Get the current UI layout XML.
         """
-        req = protos.Boolean(value=compressed)
+        req = protos.DumpWindowHierarchyRequest(display=self.display,
+                                                compressed=compressed)
         r = self.stub.dumpWindowHierarchy(req)
         return BytesIO(r.value)
     def wait_for_idle(self, timeout):
         """
-        等待当前屏幕处于闲置状态（无频繁活动切换）
+        Wait until the current screen is idle.
         """
         r = self.stub.waitForIdle(protos.Integer(value=timeout))
         return r.value
     def __call__(self, **kwargs):
-        return ObjectUiAutomatorOpStub(self, kwargs)
+        return ObjectUiAutomatorOpStub(self, kwargs,
+                                       self.display)
+
+
+class VirtualDisplayStub(UiAutomatorStub):
+    def __init__(self, *args, display=0, device=None, **kwargs):
+        self._warning_global = True
+        super(VirtualDisplayStub, self).__init__(*args,
+                                    display=display, **kwargs)
+        self.device = device
+    def _create_virtual_display(self, width=None, height=None,
+                                    densityDpi=None, name=None):
+        default = self.stub.getDisplayInfo(protos.Integer(value=0))
+        req = protos.CreateVirtualDisplayRequest(densityDpi=densityDpi or default.densityDpi,
+                                                 width=width or default.width,
+                                                 height=height or default.height)
+        req.name = name or uuid.uuid4().hex[::6]
+        return self.stub.createVirtualDisplay(req).value
+    def _list_virtual_displays(self):
+        return self.stub.listAllDisplays(protos.Empty()).displays
+    def _release_virtual_display(self, display):
+        req = protos.Integer(value=display)
+        return self.stub.releaseVirtualDisplay(req).value
+    def disable_global_method_warning(self):
+        self._warning_global = False
+    # Application compat
+    def install_local_file(self, rpath, user=0):
+        self._warning_global_use("install_local_file")
+        return self.device.proxy("Application", display=self.display).install_local_file(
+                                                                        rpath, user=user)
+    def enumerate_installed_apps(self, user=0):
+        self._warning_global_use("enumerate_installed_apps")
+        return self.device.proxy("Application", display=self.display).enumerate_installed_apps(user=user)
+    def enumerate_running_processes(self):
+        self._warning_global_use("enumerate_running_processes")
+        return self.device.proxy("Application", display=self.display).enumerate_running_processes()
+    def current_application(self):
+        return self.device.proxy("Application", display=self.display).current_application()
+    def start_activity(self, **activity):
+        return self.device.proxy("Application", display=self.display).start_activity(**activity)
+    def get_application_by_name(self, name):
+        return self.device.proxy("Application", display=self.display).get_application_by_name(name)
+    def application(self, applicationId, user=0):
+        return self.device.proxy("Application", display=self.display)(
+                                             applicationId, user=user)
+    # Display misc
+    def release_virtual_display(self):
+        return self._release_virtual_display(self.display)
+    def get_display_info(self):
+        return self.stub.getDisplayInfo(protos.Integer(value=self.display))
+    def set_display_ime_policy(self, policy):
+        req = protos.ImePolicyRequest(display=self.display, policy=policy)
+        return self.stub.setDisplayImePolicy(req).value
+    def get_display_ime_policy(self):
+        req = protos.Integer(value=self.display)
+        return self.stub.getDisplayImePolicy(req).value
+    def __enter__(self):
+        return self
+    def __exit__(self, type, value, traceback):
+        self._release_virtual_display(self.display)
+    def ocr(self, index=0, **kwargs):
+        return self.device.ocr(index=index, display=self.display,
+                                                **kwargs)
+    # Global-effect method overriding
+    def device_info(self):
+        self._warning_global_use("device_info")
+        return super(VirtualDisplayStub, self).device_info()
+    def get_last_toast(self):
+        self._warning_global_use("get_last_toast")
+        return super(VirtualDisplayStub, self).get_last_toast()
+    def open_notification(self):
+        self._warning_global_use("open_notification")
+        return super(VirtualDisplayStub, self).open_notification()
+    def open_quick_settings(self):
+        self._warning_global_use("open_quick_settings")
+        return super(VirtualDisplayStub, self).open_quick_settings()
+    def wake_up(self):
+        self._warning_global_use("wake_up")
+        return super(VirtualDisplayStub, self).wake_up()
+    def sleep(self):
+        self._warning_global_use("sleep")
+        return super(VirtualDisplayStub, self).sleep()
+    def is_screen_on(self):
+        self._warning_global_use("is_screen_on")
+        return super(VirtualDisplayStub, self).is_screen_on()
+    def is_screen_locked(self):
+        self._warning_global_use("is_screen_locked")
+        return super(VirtualDisplayStub, self).is_screen_locked()
+    def set_clipboard(self, text):
+        self._warning_global_use("set_clipboard")
+        return super(VirtualDisplayStub, self).set_clipboard(text)
+    def get_clipboard(self):
+        self._warning_global_use("get_clipboard")
+        return super(VirtualDisplayStub, self).get_clipboard()
+    def wait_for_idle(self, timeout):
+        self._warning_global_use("wait_for_idle")
+        return super(VirtualDisplayStub, self).wait_for_idle(timeout)
+    def _warning_global_use(self, method):
+        if self._warning_global:
+            logger.warning(f"Method '{method}' cannot be applied specifically to a virtual screen "
+                            "as it has a global effect. Please use the corresponding global method, or call "\
+                            "disable_global_method_warning() to suppress this warning.")
 
 
 class AppScriptRpcInterface(object):
@@ -1141,28 +1285,30 @@ class AppScriptRpcInterface(object):
 
 
 class ApplicationOpStub:
-    def __init__(self, stub, applicationId, user=0):
+    def __init__(self, stub, applicationId, user=0, display=0):
         """
-        Application 子接口，用来模拟出实例的意味
+        Application sub-interface that behaves like an instance.
         """
         self.user = user
+        self.display = display
         self.applicationId = applicationId
         self.stub = stub
     def __str__(self):
-        return "Application:{}@{}".format(self.applicationId,
-                                          self.user)
+        return "Application:{}:{}@{}".format(self.applicationId,
+                                        self.user, self.display)
     __repr__ = __str__
     def is_foreground(self):
         """
-        应用是否正处于前台运行
+        Check whether the app is in the foreground.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
+        req.display = self.display
         r = self.stub.isForeground(req)
         return r.value
     def permissions(self):
         """
-        获取应用的所有权限列表
+        Get all app permissions.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
@@ -1170,7 +1316,7 @@ class ApplicationOpStub:
         return r.permissions
     def grant(self, permission, mode=GrantType.GRANT_ALLOW):
         """
-        授予应用某个权限（应用需要运行时获取的权限）
+        Grant a runtime permission to the app.
         """
         req = protos.ApplicationRequest(name=self.applicationId,
                                         permission=permission,
@@ -1180,7 +1326,7 @@ class ApplicationOpStub:
         return r.value
     def revoke(self, permission):
         """
-        撤销授予应用的权限（应用需要运行时获取的权限）
+        Revoke a runtime permission from the app.
         """
         req = protos.ApplicationRequest(name=self.applicationId,
                                         permission=permission)
@@ -1189,7 +1335,7 @@ class ApplicationOpStub:
         return r.value
     def query_launch_activity(self):
         """
-        获取应用的启动 activity 信息
+        Get launch activity info.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
@@ -1197,7 +1343,7 @@ class ApplicationOpStub:
         return to_dict(r)
     def is_permission_granted(self, permission):
         """
-        检查是否已经授予应用某权限（应用需要运行时获取的权限）
+        Check whether the app has a runtime permission.
         """
         req = protos.ApplicationRequest(name=self.applicationId,
                                         permission=permission)
@@ -1206,7 +1352,7 @@ class ApplicationOpStub:
         return r.value
     def clear_cache(self):
         """
-        清空应用的缓存数据（非数据仅缓存）
+        Clear app cache data.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
@@ -1214,7 +1360,7 @@ class ApplicationOpStub:
         return r.value
     def reset(self):
         """
-        清空应用的所有数据
+        Clear all app data.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
@@ -1222,15 +1368,16 @@ class ApplicationOpStub:
         return r.value
     def start(self):
         """
-        启动应用
+        Start the app.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
+        req.display = self.display
         r = self.stub.startApplication(req)
         return r.value
     def stop(self):
         """
-        停止应用
+        Stop the app.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
@@ -1238,7 +1385,7 @@ class ApplicationOpStub:
         return r.value
     def info(self):
         """
-        获取应用信息
+        Get app info.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
@@ -1246,7 +1393,7 @@ class ApplicationOpStub:
         return r
     def uninstall(self):
         """
-        卸载应用 (always return true)
+        Uninstall the app (always returns true).
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
@@ -1254,7 +1401,7 @@ class ApplicationOpStub:
         return r.value
     def enable(self):
         """
-        启用应用
+        Enable the app.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
@@ -1262,31 +1409,15 @@ class ApplicationOpStub:
         return r.value
     def disable(self):
         """
-        禁用应用（这将使应用从启动器消失）
+        Disable the app.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
         r = self.stub.disableApplication(req)
         return r.value
-    def add_to_doze_mode_whitelist(self):
-        """
-        将APP加入省电白名单（可以一直运行，可能不会覆盖所有系统）
-        """
-        req = protos.ApplicationRequest(name=self.applicationId)
-        req.user = self.user
-        r = self.stub.addToDozeModeWhiteList(req)
-        return True
-    def remove_from_doze_mode_whitelist(self):
-        """
-        将APP移除省电白名单 (always return true)
-        """
-        req = protos.ApplicationRequest(name=self.applicationId)
-        req.user = self.user
-        r = self.stub.removeFromDozeModeWhiteList(req)
-        return True
     def is_installed(self):
         """
-        检查应用是否已经安装
+        Check whether the app is installed.
         """
         req = protos.ApplicationRequest(name=self.applicationId)
         req.user = self.user
@@ -1294,11 +1425,12 @@ class ApplicationOpStub:
         return r.value
     def attach_script(self, script, runtime=ScriptRuntime.RUNTIME_QJS,
                                                     emit="",
+                                process=None,
                                 encode=DataEncode.DATA_ENCODE_NONE,
                                 spawn=False,
                                 standup=5):
         """
-        向应用注入持久化 Hook 脚本
+        Inject a persistent hook script into the app.
         """
         s = isinstance(script, str)
         script = script.encode() if s else script
@@ -1311,11 +1443,12 @@ class ApplicationOpStub:
         req.destination = emit
         req.encode      = encode
         req.user        = self.user
+        req.process     = process or ""
         r = self.stub.attachScript(req)
         return r.value
     def detach_script(self):
         """
-        移除注入应用的 Hook 脚本
+        Remove the injected hook script.
         """
         req = protos.HookRequest()
         req.package     = self.applicationId
@@ -1324,7 +1457,7 @@ class ApplicationOpStub:
         return r.value
     def is_attached_script(self):
         """
-        检查使用在此应用注入了 Hook 脚本
+        Check whether a hook script is injected into this app.
         """
         req = protos.HookRequest()
         req.package     = self.applicationId
@@ -1333,7 +1466,7 @@ class ApplicationOpStub:
         return r.value
     def is_script_alive(self):
         """
-        检查应用中的 Hook 脚本是否正常
+        Check whether the hook script in this app is healthy.
         """
         req = protos.HookRequest()
         req.package     = self.applicationId
@@ -1342,18 +1475,22 @@ class ApplicationOpStub:
         return r.value
     def __getattr__(self, name):
         """
-        调用注入应用 Hook 脚本的导出方法
+        Call an exported method from the injected hook script.
         """
         return AppScriptRpcInterface(self.stub, self,
                                             name)
 
 
 class ApplicationStub(BaseServiceStub):
+    def __init__(self, *args, display=0, **kwargs):
+        super(ApplicationStub, self).__init__(*args, **kwargs)
+        self.display = display
     def current_application(self):
         """
-        获取当前处于前台的应用的信息
+        Get the current foreground app info.
         """
-        top = self.stub.currentApplication(protos.Empty())
+        req = protos.Integer(value=self.display)
+        top = self.stub.currentApplication(req)
         app = self.__call__(top.packageName, user=top.user)
         app.activity = top.activity
         return app
@@ -1364,47 +1501,43 @@ class ApplicationStub(BaseServiceStub):
         return app
     def enumerate_running_processes(self):
         """
-        列出设备上所有正在运行的安卓应用进程
+        List all running Android app processes.
         """
         r = self.stub.enumerateRunningProcesses(protos.Empty())
         return r.processes
-    def enumerate_all_pkg_names(self):
+    def enumerate_installed_apps(self, user=0):
         """
-        列出所有已安装的应用的 applicationId
+        List application IDs of all installed apps.
         """
-        r = self.stub.enumerateAllPkgNames(protos.Empty())
-        return r.names
-    def get_last_activities(self, count=3):
-        """
-        获取系统中最后一个活动的详细信息
-        """
-        req = protos.Integer(value=count)
-        r = self.stub.getLastActivities(req).activities
-        return list(map(to_dict, r))
+        req = protos.Integer(value=user)
+        r = self.stub.enumerateInstalledApps(req)
+        return r.applications
     def start_activity(self, **activity):
         """
-        启动 activity（总是返回 True）
+        Start an activity (always returns True).
         """
         activity.setdefault("extras", {})
         extras = activity.pop("extras")
         req = protos.ApplicationActivityRequest(**activity)
         req.extras.update(extras)
+        req.display = self.display
         r = self.stub.startActivity(req)
         return r.value
     def install_local_file(self, fpath, user=0):
         """
-        安装设备上的 apk 文件（注意此路径为设备上的 apk 路径）
+        Install an APK from a device path.
         """
         req = protos.ApplicationRequest(path=fpath)
         req.user = user
         r = self.stub.installFromLocalFile(req)
         return r
     def __call__(self, applicationId, user=0):
-        return ApplicationOpStub(self.stub, applicationId, user)
+        return ApplicationOpStub(self.stub, applicationId,
+                                    user=user, display=self.display)
 
 
 class StorageOpStub:
-    # 用于容器值序列化的方法
+    # Helpers for container value serialization.
     def _decrypt(self, data):
         return self.cryptor.decrypt(data)
     def _encrypt(self, data):
@@ -1413,14 +1546,14 @@ class StorageOpStub:
         return msgpack.loads(self._decrypt(value))
     def _pack(self, value):
         return self._encrypt(msgpack.dumps(value))
-    # 注意：此接口可能并不是跨语言通用
+    # This interface may not be portable across languages.
     def __init__(self, stub, name, cryptor=None):
         self.cryptor = cryptor
         self.name = name
         self.stub = stub
     def delete(self, key):
         """
-        删除一个 KEY
+        Delete a key.
         """
         req = protos.StorageRequest(key=key)
         req.container = self.name
@@ -1428,7 +1561,7 @@ class StorageOpStub:
         return res.value
     def exists(self, key):
         """
-        检查一个 KEY 是否存在
+        Check whether a key exists.
         """
         req = protos.StorageRequest(key=key)
         req.container = self.name
@@ -1436,7 +1569,7 @@ class StorageOpStub:
         return res.value
     def get(self, key, default=None):
         """
-        获取 KEY 对应的键值
+        Get the value for a key.
         """
         req = protos.StorageRequest(key=key)
         req.container = self.name
@@ -1445,7 +1578,7 @@ class StorageOpStub:
         return res
     def set(self, key, value):
         """
-        设置 KEY 对应的键值
+        Set the value for a key.
         """
         value = self._pack(value)
         req = protos.StorageRequest(key=key, value=value)
@@ -1454,7 +1587,7 @@ class StorageOpStub:
         return res.value
     def setex(self, key, value, ttl):
         """
-        设置 KEY 对应的键值，该 KEY 在 TTL 秒后自动删除
+        Set a key value and expire it after TTL seconds.
         """
         value = self._pack(value)
         req = protos.StorageRequest(key=key, value=value)
@@ -1464,7 +1597,7 @@ class StorageOpStub:
         return res.value
     def setnx(self, key, value):
         """
-        设置 KEY 对应的键值 (仅当该键不存在时)
+        Set the value for a key only if it does not exist.
         """
         value = self._pack(value)
         req = protos.StorageRequest(key=key, value=value)
@@ -1473,7 +1606,7 @@ class StorageOpStub:
         return res.value
     def expire(self, key, ttl):
         """
-        设置 KEY 在 TTL 秒后过期
+        Set a key to expire after TTL seconds.
         """
         req = protos.StorageRequest(key=key, ttl=ttl)
         req.container = self.name
@@ -1481,7 +1614,7 @@ class StorageOpStub:
         return res.value
     def ttl(self, key):
         """
-        获取 KEY 的 TTL (过期时间)
+        Get the TTL for a key.
         """
         req = protos.StorageRequest(key=key)
         req.container = self.name
@@ -1492,18 +1625,18 @@ class StorageOpStub:
 class StorageStub(BaseServiceStub):
     def clear(self):
         """
-        删除所有 Storage 容器
+        Delete all storage containers.
         """
         r = self.stub.clearAll(protos.Empty())
         return r.value
     def use(self, name, cryptor=BaseCryptor, **kwargs):
         """
-        使用一个 Storage 容器
+        Use a storage container.
         """
         return StorageOpStub(self.stub, name, cryptor(**kwargs))
     def remove(self, name):
         """
-        删除一个 Storage 容器
+        Delete a storage container.
         """
         req = protos.String(value=name)
         r = self.stub.clearContainer(req)
@@ -1516,7 +1649,7 @@ class UtilStub(BaseServiceStub):
             return fd.read()
     def is_ca_certificate_installed(self, certfile):
         """
-        安装系统证书（用于 MITM）
+        Install a system certificate for MITM.
         """
         data = self._get_file_content(certfile)
         req = protos.CertifiRequest(cert=data)
@@ -1524,7 +1657,7 @@ class UtilStub(BaseServiceStub):
         return r.value
     def install_ca_certificate(self, certfile):
         """
-        安装系统证书（用于 MITM）
+        Install a system certificate for MITM.
         """
         data = self._get_file_content(certfile)
         req = protos.CertifiRequest(cert=data)
@@ -1532,7 +1665,7 @@ class UtilStub(BaseServiceStub):
         return r.value
     def uninstall_ca_certificate(self, certfile):
         """
-        移除系统证书（用于 MITM）
+        Remove a system certificate used for MITM.
         """
         data = self._get_file_content(certfile)
         req = protos.CertifiRequest(cert=data)
@@ -1540,39 +1673,39 @@ class UtilStub(BaseServiceStub):
         return r.value
     def reboot(self):
         """
-        重启系统（宿主设备）
+        Reboot the host device.
         """
         r = self.stub.reboot(protos.Empty())
         return r.value
     def shutdown(self):
         """
-        关闭系统（宿主设备）
+        Shut down the host device.
         """
         r = self.stub.shutdown(protos.Empty())
         return r.value
     def reload(self, clean=False):
         """
-        重载设备上运行的服务端
+        Reload the server running on the device.
         """
         req = protos.Boolean(value=clean)
         r = self.stub.reload(req)
         return r.value
     def exit(self):
         """
-        退出设备上运行的服务端
+        Exit the server running on the device.
         """
         r = self.stub.exit(protos.Empty())
         return r.value
     def beep(self):
         """
-        播放一声蜂鸣（物理查找）
+        Play a beep to help locate the device.
         """
         r = self.stub.beepBeep(protos.Empty())
         return r.value
     def play_audio(self, file, type=AudioStreamType.AST_SYSTEM,
                                         loop=1, interval=0):
         """
-        播放 wav 音频
+        Play a WAV file.
         """
         profile = PlayAudioProfile()
         profile.file = file
@@ -1583,28 +1716,28 @@ class UtilStub(BaseServiceStub):
         return r.value
     def show_toast(self, text, duration=ToastDuration.TD_SHORT):
         """
-        在系统界面底部显示一个 Toast 消息
+        Show a toast message at the bottom of the screen.
         """
         req = protos.ShowToastRequest(text=text, duration=duration)
         r = self.stub.showToast(req)
         return r.value
     def setprop(self, name, value):
         """
-        设置系统属性（aka: setprop，支持设置 ro.xx 只读属性）
+        Set a system property, including read-only ro.xx values.
         """
         req = protos.SetPropRequest(name=name, value=value)
         r = self.stub.setProp(req)
         return r.value
     def getprop(self, name):
         """
-        获取系统属性（aka: getprop）
+        Get a system property.
         """
         req = protos.String(value=name)
         r = self.stub.getProp(req)
         return r.value
     def server_info(self):
         """
-        获取服务端ID、版本等信息
+        Get server ID, version, and related info.
         """
         r = self.stub.serverInfo(protos.Empty())
         return r
@@ -1612,7 +1745,7 @@ class UtilStub(BaseServiceStub):
                                         maxreplace=-1,
                                         dryrun=False):
         """
-        对设备上的文件进行十六进制字节替换
+        Replace bytes in a file on the device.
         """
         req = protos.HexPatchRequest()
         req.pattern     = pattern
@@ -1629,7 +1762,7 @@ class DebugStub(BaseServiceStub):
             return fd.read()
     def install_adb_pubkey(self, pubkey):
         """
-        给内置 adb 服务添加公钥
+        Add a public key to the built-in adb service.
         """
         req = protos.ADBDConfigRequest()
         req.adb_pubkey = self._read_pubkey(pubkey)
@@ -1637,7 +1770,7 @@ class DebugStub(BaseServiceStub):
         return r.value
     def uninstall_adb_pubkey(self, pubkey):
         """
-        从内置 adb 服务移除公钥
+        Remove a public key from the built-in adb service.
         """
         req = protos.ADBDConfigRequest()
         req.adb_pubkey = self._read_pubkey(pubkey)
@@ -1645,19 +1778,19 @@ class DebugStub(BaseServiceStub):
         return r.value
     def is_android_debug_bridge_running(self):
         """
-        远端 adb daemon 是否在运行
+        Check whether the remote adb daemon is running.
         """
         r = self.stub.isAndroidDebugBridgeRunning(protos.Empty())
         return r.value
     def start_android_debug_bridge(self):
         """
-        启动内置 adbd (默认随框架启动)
+        Start the built-in adbd.
         """
         r = self.stub.startAndroidDebugBridge(protos.Empty())
         return r.value
     def stop_android_debug_bridge(self):
         """
-        停止内置 adb daemon
+        Stop the built-in adb daemon.
         """
         r = self.stub.stopAndroidDebugBridge(protos.Empty())
         return r.value
@@ -1675,32 +1808,32 @@ class SettingsStub(BaseServiceStub):
         return r.value
     def get_system(self, name):
         """
-        等价于 settings get system xxxx
+        Equivalent to settings get system xxxx.
         """
         return self._get(Group.GROUP_SYSTEM, name)
     def put_system(self, name, value):
         """
-        等价于 settings put system xxxx xxxx
+        Equivalent to settings put system xxxx xxxx.
         """
         return self._put(Group.GROUP_SYSTEM, name, value)
     def get_global(self, name):
         """
-        等价于 settings get global xxxx
+        Equivalent to settings get global xxxx.
         """
         return self._get(Group.GROUP_GLOBAL, name)
     def put_global(self, name, value):
         """
-        等价于 settings put global xxxx xxxx
+        Equivalent to settings put global xxxx xxxx.
         """
         return self._put(Group.GROUP_GLOBAL, name, value)
     def get_secure(self, name):
         """
-        等价于 settings get secure xxxx
+        Equivalent to settings get secure xxxx.
         """
         return self._get(Group.GROUP_SECURE, name)
     def put_secure(self, name, value):
         """
-        等价于 settings put secure xxxx xxxx
+        Equivalent to settings put secure xxxx xxxx.
         """
         return self._put(Group.GROUP_SECURE, name, value)
 
@@ -1709,7 +1842,7 @@ class ShellStub(BaseServiceStub):
     def execute_script(self, script, alias=None,
                                     timeout=60):
         """
-        前台执行一段脚本（支持标准的多行脚本）
+        Run a script in the foreground.
         """
         req = protos.ShellRequest(name=alias, script=script,
                                             timeout=timeout)
@@ -1717,21 +1850,21 @@ class ShellStub(BaseServiceStub):
         return r
     def execute_background_script(self, script, alias=None):
         """
-        后台执行一段脚本（支持标准的多行脚本）
+        Run a script in the background.
         """
         req = protos.ShellRequest(name=alias, script=script)
         r = self.stub.executeBackground(req)
         return r.tid
     def is_background_script_finished(self, tid):
         """
-        后台脚本是否已经结束
+        Check whether the background script has finished.
         """
         req = protos.ShellTask(tid=tid)
         r = self.stub.isBackgroundFinished(req)
         return r.value
     def kill_background_script(self, tid):
         """
-        强行停止后台脚本
+        Force-stop the background script.
         """
         req = protos.ShellTask(tid=tid)
         r = self.stub.killBackground(req)
@@ -1741,57 +1874,57 @@ class ShellStub(BaseServiceStub):
 class StatusStub(BaseServiceStub):
     def get_boot_time(self):
         """
-        获取设备启动时间 Unix 时间戳
+        Get the device boot time as a Unix timestamp.
         """
         r = self.stub.getBootTime(protos.Empty())
         return r.value
     def get_disk_usage(self, mountpoint="/data"):
         """
-        获取分区数据使用情况
+        Get partition usage stats.
         """
         req = protos.String(value=mountpoint)
         r = self.stub.getDiskUsage(req)
         return r
     def get_battery_info(self):
         """
-        获取电池信息
+        Get battery info.
         """
         r = self.stub.getBatteryInfo(protos.Empty())
         return r
     def get_cpu_info(self):
         """
-        获取 CPU 用量等信息
+        Get CPU usage and related stats.
         """
         r = self.stub.getCpuInfo(protos.Empty())
         return r
     def get_overall_disk_io_info(self):
         """
-        获取全局的设备磁盘读写状况
+        Get global disk I/O stats.
         """
         r = self.stub.getOverallDiskIOInfo(protos.Empty())
         return r
     def get_overall_net_io_info(self):
         """
-        获取全局的设备网络收发状况
+        Get global network traffic stats.
         """
         r = self.stub.getOverallNetIOInfo(protos.Empty())
         return r
     def get_userdata_disk_io_info(self):
         """
-        获取用户数据设备磁盘读写状况
+        Get user-data disk I/O stats.
         """
         r = self.stub.getUserDataDiskIOInfo(protos.Empty())
         return r
     def get_net_io_info(self, interface):
         """
-        获取特定接口的网络收发状况
+        Get network traffic stats for a specific interface.
         """
         req = protos.String(value=interface)
         r = self.stub.getNetIOInfo(req)
         return r
     def get_mem_info(self):
         """
-        获取设备内存状况
+        Get memory stats.
         """
         r = self.stub.getMemInfo(protos.Empty())
         return r
@@ -1800,39 +1933,39 @@ class StatusStub(BaseServiceStub):
 class ProxyStub(BaseServiceStub):
     def is_openvpn_running(self):
         """
-        检查 OPENVPN 是否正在运行
+        Check whether OPENVPN is running.
         """
         r = self.stub.isOpenVPNRunning(protos.Empty())
         return r.value
     def is_gproxy_running(self):
         """
-        检查 GPROXY 是否正在运行
+        Check whether GPROXY is running.
         """
         r = self.stub.isGproxyRunning(protos.Empty())
         return r.value
     def start_openvpn(self, profile):
         """
-        启动 OPENVPN
+        Start OPENVPN.
         """
         checkArgumentTyp(profile, OpenVPNProfile)
         r = self.stub.startOpenVPN(profile)
         return r.value
     def start_gproxy(self, profile):
         """
-        启动 GPROXY
+        Start GPROXY.
         """
         checkArgumentTyp(profile, GproxyProfile)
         r = self.stub.startGproxy(profile)
         return r.value
     def stop_openvpn(self):
         """
-        停止 OPENVPN
+        Stop OPENVPN.
         """
         r = self.stub.stopOpenVPN(protos.Empty())
         return r.value
     def stop_gproxy(self):
         """
-        停止 GPROXY
+        Stop GPROXY.
         """
         r = self.stub.stopGproxy(protos.Empty())
         return r.value
@@ -1857,40 +1990,40 @@ class SelinuxPolicyStub(BaseServiceStub):
         return r.value
     def get_enforce(self):
         """
-        获取当前 selinux enforce 状态
+        Get the current SELinux enforce state.
         """
         r = self.stub.getEnforce(protos.Empty())
         return r.value
     def set_enforce(self, enforced=True):
         """
-        设置当前 selinux enforce 状态 (aka: setenforce 0/1)
+        Set the current SELinux enforce state.
         """
         req = protos.Boolean(value=enforced)
         r = self.stub.setEnforce(req)
         return r.value
     def enabled(self):
         """
-        获取设备上的 selinux 是否已经启用
+        Check whether SELinux is enabled on the device.
         """
         r = self.stub.isEnabled(protos.Empty())
         return r.value
     def enforce(self, name):
         """
-        设置一个域为 enforce
+        Set a domain to enforce.
         """
         req = protos.String(value=name)
         r = self.stub.policySetEnforce(req)
         return r.value
     def permissive(self, name):
         """
-        设置一个域为 permissive
+        Set a domain to permissive.
         """
         req = protos.String(value=name)
         r = self.stub.policySetPermissive(req)
         return r.value
     def create_domain(self, name):
         """
-        新建一个 selinux 域
+        Create a new SELinux domain.
         """
         req = protos.String(value=name)
         r = self.stub.policyCreateDomain(req)
@@ -1910,7 +2043,7 @@ class FileStub(BaseServiceStub):
             fd.write(chunk.payload)
     def download_fd(self, fpath, fd):
         """
-        从设备下载文件到文件描述符
+        Download a file from the device to a file descriptor.
         """
         req = protos.FileRequest(path=fpath)
         iterator = self.stub.downloadFile(req)
@@ -1919,7 +2052,7 @@ class FileStub(BaseServiceStub):
         return st
     def upload_fd(self, fd, dest):
         """
-        上传文件描述符至设备
+        Upload a file descriptor to the device.
         """
         chunksize = 1024*1024*1
         streaming = self._fd_streaming_send(fd, dest,
@@ -1929,33 +2062,33 @@ class FileStub(BaseServiceStub):
         return st
     def download_file(self, fpath, dest):
         """
-        从设备下载文件到本地
+        Download a file from the device to local storage.
         """
         with io.open(dest, mode="wb") as fd:
             return self.download_fd(fpath, fd)
     def upload_file(self, fpath, dest):
         """
-        上传本地文件至设备
+        Upload a local file to the device.
         """
         with io.open(fpath, mode="rb") as fd:
             return self.upload_fd(fd, dest)
     def delete_file(self, fpath):
         """
-        删除设备上的文件
+        Delete a file on the device.
         """
         req = protos.FileRequest(path=fpath)
         r = self.stub.deleteFile(req)
         return r.value
     def file_chmod(self, fpath, mode=0o644):
         """
-        更改设备上文件的权限
+        Change file permissions on the device.
         """
         req = protos.FileRequest(path=fpath, mode=mode)
         r = self.stub.fileChmod(req)
         return r
     def file_stat(self, fpath):
         """
-        获取设备上文件的信息
+        Get file info on the device.
         """
         req = protos.FileRequest(path=fpath)
         r = self.stub.fileStat(req)
@@ -1965,27 +2098,27 @@ class FileStub(BaseServiceStub):
 class LockStub(BaseServiceStub):
     def acquire_lock(self, leaseTime=60):
         """
-        获取用于控制设备的锁，成功返回 true，被占用则会引发异常提示
+        Acquire the device control lock and raise if it is busy.
         """
         req = protos.Integer(value=leaseTime)
         r = self.stub.acquireLock(req)
         return r.value
     def get_session_token(self):
         """
-        获取当前会话的动态令牌
+        Get the current session token.
         """
         r = self.stub.getSessionToken(protos.Empty())
         return r.value
     def refresh_lock(self, leaseTime=60):
         """
-        刷新用于控制设备的锁，应该在定时任务每60s内调用以保持会话
+        Refresh the device control lock within 60 seconds to keep the session.
         """
         req = protos.Integer(value=leaseTime)
         r = self.stub.refreshLock(req)
         return r.value
     def release_lock(self):
         """
-        释放控制设备的锁，释放后该设备可被其他客户端控制
+        Release the device control lock.
         """
         r = self.stub.releaseLock(protos.Empty())
         return r.value
@@ -1994,55 +2127,55 @@ class LockStub(BaseServiceStub):
 class WifiStub(BaseServiceStub):
     def status(self):
         """
-        获取当前已连接 WIFI 的信息
+        Get info for the currently connected Wi-Fi.
         """
         r = self.stub.status(protos.Empty())
         return r
     def blacklist_add(self, bssid):
         """
-        将 BSSID 加入 WIFI BSSID 黑名单（将不会在WIFI列表显示）
+        Add a BSSID to the Wi-Fi blacklist.
         """
         r = self.stub.blacklistAdd(protos.String(value=bssid))
         return r.value
     def blacklist_clear(self):
         """
-        清空 WIFI BSSID 黑名单
+        Clear the Wi-Fi BSSID blacklist.
         """
         r = self.stub.blacklistClear(protos.Empty())
         return r.value
     def blacklist_get_all(self):
         """
-        获取在 WIFI BSSID 黑名单中的所有 BSSID
+        Get all blacklisted Wi-Fi BSSIDs.
         """
         r = self.stub.blacklistAll(protos.Empty())
         return r.bssids
     def scan(self):
         """
-        请求扫描附近 WIFI
+        Request a nearby Wi-Fi scan.
         """
         r = self.stub.scan(protos.Empty())
         return r.value
     def scan_results(self):
         """
-        获取已扫描到的附近 WIFI
+        Get scanned nearby Wi-Fi networks.
         """
         r = self.stub.scanResults(protos.Empty())
         return r.stations
     def get_mac_addr(self):
         """
-        获取当前 WIFI 的 MAC 地址
+        Get the current Wi-Fi MAC address.
         """
         r = self.stub.getMacAddr(protos.Empty())
         return r.value
     def signal_poll(self):
         """
-        获取当前已连接 WIFI 的信号强度等信息
+        Get current Wi-Fi signal info.
         """
         r = self.stub.signalPoll(protos.Empty())
         return r
     def list_networks(self):
         """
-        列出已连接过的 WIFI 网络
+        List previously connected Wi-Fi networks.
         """
         r = self.stub.listNetworks(protos.Empty())
         return r.networks
@@ -2062,13 +2195,13 @@ class WifiStub(BaseServiceStub):
         raise NotImplementedError
     def disconnect(self):
         """
-        断开 WIFI 连接
+        Disconnect Wi-Fi.
         """
         r = self.stub.disconnect(protos.Empty())
         return r.value
     def reconnect(self):
         """
-        重连 WIFI
+        Reconnect Wi-Fi.
         """
         r = self.stub.reconnect(protos.Empty())
         return r.value
@@ -2082,12 +2215,14 @@ class WifiStub(BaseServiceStub):
 
 class OcrOperator(object):
     def __init__(self, device, elements=None,
+                                    display=0,
                                     **kwargs):
         self.elements = elements
         self.index = kwargs.pop("index", 0)
         self.func, self.rule = kwargs.popitem()
         self.match = getattr(self, self.func)
-        self.device = device
+        self.automator = device.proxy("UiAutomator",
+                                        display=display)
     def text(self, item):
         return self.rule == item["text"]
     def textMatches(self, item):
@@ -2114,43 +2249,42 @@ class OcrOperator(object):
     def throw(self, exception, *args):
         raise exception(*args)
     def _screenshot(self, item, quality):
-        return self.device.screenshot(quality,
-                            bound=item["bound"])
+        return self.automator.screenshot(quality, bound=item["bound"])
     def _click(self, item):
         point = item["bound"].center()
-        return self.device.click(point)
+        return self.automator.click(point)
     def __str__(self):
         return "Ocr: {}={}".format(self.func, self.rule)
     __repr__ = __str__
     def exists(self):
         """
-        OCR - 检查元素是否存在
+        OCR: check whether the element exists.
         """
         return bool(self.find_target_item())
     def click(self):
         """
-        OCR - 点击元素（不存在则报错）
+        OCR: click the element or raise if missing.
         """
         return self.find_or_throw_cb(self._click)
     def click_exists(self):
         """
-        OCR - 点击元素（不存在将不会产生异常）
+        OCR: click the element without raising if missing.
         """
         return self.find_cb(self._click, False)
     def screenshot(self, quality=100):
         """
-        OCR - 对元素进行截图
+        OCR: screenshot the element.
         """
         return self.find_or_throw_cb(self._screenshot,
                                             quality)
     def take_screenshot(self, quality=100):
         """
-        OCR - 对元素进行截图
+        OCR: screenshot the element.
         """
         return self.screenshot(quality)
     def info(self):
         """
-        OCR - 获取匹配元素的信息
+        OCR: get info for the matched element.
         """
         item = self.find_item_or_throw()
         return item
@@ -2221,8 +2355,8 @@ class Device(object):
         option = dict()
         option["grpc.max_send_message_length"] = 64*1024*1024
         option["grpc.max_receive_message_length"] = 128*1024*1024
-        option["grpc.keepalive_time_ms"] = 30*1000
-        option["grpc.keepalive_timeout_ms"] = 15*1000
+        option["grpc.keepalive_time_ms"] = 60*1000
+        option["grpc.keepalive_timeout_ms"] = 20*1000
         option["grpc.keepalive_permit_without_calls"] = True
         option["grpc.max_pings_without_data"] = 0
         option["grpc.service_config"] = config
@@ -2287,17 +2421,14 @@ class Device(object):
         _, _, der = pem.unarmor(crt)
         subject = x509.Certificate.load(der).subject
         return subject.native["common_name"]
-    def _get_service_stub(self, module):
-        stub = getattr(services, "{0}Stub".format(module))
-        return stub(self.channel)
     def stub(self, module):
-        modu = sys.modules[__name__]
-        stub = self._get_service_stub(module)
-        wrap = getattr(modu, "{0}Stub".format(module))
-        inst = getattr(self, module, wrap(stub))
-        self.__setattr__(module, inst)
-        return inst
-    # 快速调用: File
+        return self.proxy(module)
+    def proxy(self, module, clazz=None, **kwargs):
+        this = sys.modules[__name__]
+        stub = getattr(services, "{0}Stub".format(module))(self.channel)
+        wrap = getattr(this, "{0}Stub".format(clazz or module))
+        return wrap(stub, **kwargs)
+    # Shortcut: File
     def download_fd(self, fpath, fd):
         return self.stub("File").download_fd(fpath, fd)
     def upload_fd(self, fd, dest):
@@ -2312,24 +2443,22 @@ class Device(object):
         return self.stub("File").file_chmod(fpath, mode=mode)
     def file_stat(self, fpath):
         return self.stub("File").file_stat(fpath)
-    # 快速调用: Application
+    # Shortcut: Application
     def install_local_file(self, rpath, user=0):
         return self.stub("Application").install_local_file(rpath, user=user)
     def current_application(self):
         return self.stub("Application").current_application()
-    def enumerate_all_pkg_names(self):
-        return self.stub("Application").enumerate_all_pkg_names()
+    def enumerate_installed_apps(self, user=0):
+        return self.stub("Application").enumerate_installed_apps(user=user)
     def enumerate_running_processes(self):
         return self.stub("Application").enumerate_running_processes()
-    def get_last_activities(self, count=3):
-        return self.stub("Application").get_last_activities(count=count)
     def start_activity(self, **activity):
         return self.stub("Application").start_activity(**activity)
     def get_application_by_name(self, name):
         return self.stub("Application").get_application_by_name(name)
     def application(self, applicationId, user=0):
         return self.stub("Application")(applicationId, user=user)
-    # 快速调用: Util
+    # Shortcut: Util
     def touch(self):
         return MultiTouchOpStub(self.stub("Util"))
     def show_toast(self, text, duration=ToastDuration.TD_SHORT):
@@ -2363,7 +2492,7 @@ class Device(object):
         return self.stub("Util").hex_patch(pattern, replacement, path,
                                     maxreplace=maxreplace,
                                     dryrun=dryrun)
-    # 快速调用: Debug
+    # Shortcut: Debug
     def install_adb_pubkey(self, pubkey):
         return self.stub("Debug").install_adb_pubkey(pubkey)
     def uninstall_adb_pubkey(self, pubkey):
@@ -2374,7 +2503,7 @@ class Device(object):
         return self.stub("Debug").is_android_debug_bridge_running()
     def stop_android_debug_bridge(self):
         return self.stub("Debug").stop_android_debug_bridge()
-    # 快速调用: Proxy
+    # Shortcut: Proxy
     def is_openvpn_running(self):
         return self.stub("Proxy").is_openvpn_running()
     def is_gproxy_running(self):
@@ -2387,7 +2516,15 @@ class Device(object):
         return self.stub("Proxy").stop_openvpn()
     def stop_gproxy(self):
         return self.stub("Proxy").stop_gproxy()
-    # 快速调用: Shell
+    # Virtual Display
+    def get_virtual_display_by_id(self, display):
+        return self.proxy("UiAutomator", clazz="VirtualDisplay",
+                            display=display, device=self)
+    def create_virtual_display(self, width=None, height=None, densityDpi=None, name=None):
+        display = self.proxy("UiAutomator", clazz="VirtualDisplay")._create_virtual_display(
+                                                    width, height, densityDpi, name=name)
+        return self.get_virtual_display_by_id(display)
+    # Shortcut: Shell
     def execute_script(self, script, alias=None, timeout=60):
         return self.stub("Shell").execute_script(script, alias=alias,
                                                         timeout=timeout)
@@ -2397,9 +2534,11 @@ class Device(object):
         return self.stub("Shell").is_background_script_finished(tid)
     def kill_background_script(self, tid):
         return self.stub("Shell").kill_background_script(tid)
-    # 快速调用: UiAutomator
+    # Shortcut: UiAutomator
     def click(self, point):
         return self.stub("UiAutomator").click(point)
+    def long_click(self, point, timeout=0):
+        return self.stub("UiAutomator").long_click(point, timeout=timeout)
     def drag(self, A, B, step=32):
         return self.stub("UiAutomator").drag(A, B, step=step)
     def swipe(self, A, B, step=32):
@@ -2457,8 +2596,10 @@ class Device(object):
         return self.stub("UiAutomator").get_watcher_triggered_count(name)
     def reset_watcher_triggered_count(self, name):
         return self.stub("UiAutomator").reset_watcher_triggered_count(name)
-    def get_applied_watchers(self):
-        return self.stub("UiAutomator").get_applied_watchers()
+    def get_enabled_watchers(self):
+        return self.stub("UiAutomator").get_enabled_watchers()
+    def get_watchers(self):
+        return self.stub("UiAutomator").get_watchers()
     def register_click_target_selector_watcher(self, name, conditions,
                                                target):
         return self.stub("UiAutomator").register_click_target_selector_watcher(
@@ -2484,8 +2625,8 @@ class Device(object):
         return self.stub("Util").server_info()
     def __call__(self, **kwargs):
         return self.stub("UiAutomator")(**kwargs)
-    # OCR 功能扩展
-    def ocr(self, index=0, **kwargs):
+    # OCR extension.
+    def ocr(self, index=0, display=0, **kwargs):
         if not isinstance(self._ocr, OcrEngine):
             raise IllegalStateException("Ocr engine is not setted up")
         if any(r not in ["text", "textContains", "textMatches"] \
@@ -2493,10 +2634,12 @@ class Device(object):
             raise InvalidArgumentError("Only text* matches are supported")
         if len(kwargs) != 1:
             raise InvalidArgumentError("Only or at least one rule can be used")
-        image = self.screenshot(self._ocr_img_quality)
+        image = self.proxy("UiAutomator", display=display).screenshot(
+                                        self._ocr_img_quality)
         return OcrOperator(self,
         elements=self._ocr.ocr(image),
                             index=index,
+                            display=display,
                             **kwargs
         )
     def setup_ocr_backend(self, service, *args, quality=75,
@@ -2504,12 +2647,12 @@ class Device(object):
         self._ocr_img_quality = quality
         self._ocr = OcrEngine(service, *args,
                                     **kwargs)
-    # 日志打印
+    # Logging control.
     def set_debug_log_enabled(self, enable):
         level = logging.DEBUG if enable else logging.WARN
         logger.setLevel(level)
         return enable
-    # 接口锁定
+    # Lock API.
     def _get_session_token(self):
         return self.stub("Lock").get_session_token()
     def _acquire_lock(self, leaseTime=60):

@@ -45,6 +45,7 @@ message GproxyConfigRequest {
         bool drop_udp               = 9;
         bool udp_proxy              = 10;
         bool dns_proxy              = 11;
+        string interface            = 12;
 }
 
 enum OpenVPNProto {

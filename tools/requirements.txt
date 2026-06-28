@@ -1,4 +1,4 @@
-mitmproxy>=9.0.0,<=10.2.0
+mitmproxy>9.0.0
 dnspython
 httpx[socks]<0.28.0
 packaging

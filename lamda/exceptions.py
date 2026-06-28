@@ -50,3 +50,5 @@ class UiObjectNotFoundException(Exception):
     """ Exception """
 class UnHandledException(Exception):
     """ Exception """
+class UnsupportedOperationException(Exception):
+    """ Exception """

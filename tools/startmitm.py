@@ -131,11 +131,13 @@ lamda = int(os.environ.get("PORT",
 
 argp.add_argument("device", nargs=1)
 mod = argp.add_mutually_exclusive_group(required=False)
-mod.add_argument("-m", "--mode", default="regular")
+mod.add_argument("-m", "--mode", default="socks5")
 mod.add_argument("--upstream", type=str, default=None,
                   help="Upstream http proxy")
 argp.add_argument("--proxy-dns", type=str, default=None,
                   help="Resolve dns(tcp) through proxy")
+argp.add_argument("--device-side-out-interface", type=str, default="auto",
+                  help="Specify the outgoing network interface on the device")
 argp.add_argument("--serial", type=str, default=None,
                   help="Adb device serial")
 args, extras = argp.parse_known_args()
@@ -170,18 +172,27 @@ ca = os.path.join(DIR, "mitmproxy-ca-cert.pem")
 log ("install cacert: %s" % ca)
 d.install_ca_certificate(ca)
 
+# disable ipv6
+# If the local device does not have a valid public IPv6 address but the mobile device does,
+# it may cause the device to show "no network". so IPv6 is disabled here for the phone.
+d.execute_script("echo 1 | tee /proc/sys/net/ipv6/conf/all/disable_ipv6")
+
 # Initialize proxy profile
 profile = GproxyProfile()
-profile.type = GproxyType.HTTP_CONNECT
+profile.type = GproxyType.SOCKS5
 profile.bypass_local_subnet = True
+profile.interface = args.device_side_out_interface
+
+# SOCKS5 is not supported in upstream mode
+# https://github.com/mitmproxy/mitmproxy/issues/2813
+if args.upstream: profile.type = GproxyType.HTTP_CONNECT
 
 if args.proxy_dns: profile.nameserver = args.proxy_dns
 if args.proxy_dns: profile.dns_proxy = True
 # Prevent DNS from being intercepted
 if args.proxy_dns: extras.extend(["--ignore-host", args.proxy_dns])
 
-# HTTP MITM Proxy not support udp so drop it
-profile.drop_udp = True
+profile.udp_proxy = True
 
 profile.host = server
 profile.port = proxy

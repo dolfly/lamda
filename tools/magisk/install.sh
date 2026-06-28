@@ -33,10 +33,11 @@ $BB tar -xzf $SERVER
 
 ui_print "- Placing configs"
 mkdir -p ${USRDIR}
+mkdir -p ${USRDIR}/.local
 
 cp -af $TMPDIR/adb_keys ${USRDIR}/.adb_keys
 
-cp -af $TMPDIR/properties.local ${USRDIR}
+cp -af $TMPDIR/properties ${USRDIR}/.local/properties
 cp -af $TMPDIR/lamda.pem ${USRDIR}
 
 ui_print "- Please reboot your device"

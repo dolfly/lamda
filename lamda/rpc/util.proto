@@ -79,6 +79,7 @@ message ServerInfoResponse {
         string     architecture = 3;
         uint64           uptime = 4;
         bool             secure = 5;
+        bool         privileged = 6;
 }
 
 message HexPatchRequest {
