@@ -11,7 +11,7 @@
 
 <h6>一个集下一代技术于一体的全能型 Android 自动化框架，融合了强大的端侧服务、AI 就绪型智能体以及可扩展的工具调用能力。</h6>
 
-<p align="left"><a href="https://device-farm.com/docs/en/">Documentation</a> | <a href="https://device-farm.com/docs/zh/">使用文档</a> | <a href="https://device-farm.com/contact#telegram">TELEGRAM</a> | <a href="https://device-farm.com/contact#QQ">QQ 群</a> | <a href="https://device-farm.com/contact#WeChat">企业微信</a> | <a href="https://device-farm.com/llms-full.txt">llms-full.txt</a> | <a href="README.zh.md">中文版本</a></p>
+<p align="left"><a href="https://device-farm.com/docs/en/">Documentation</a> | <a href="https://device-farm.com/docs/zh/">使用文档</a> | <a href="https://device-farm.com/contact#telegram">TELEGRAM</a> | <a href="https://device-farm.com/contact#QQ">QQ 群</a> | <a href="https://github.com/firerpa/skills">SKILLS</a> | <a href="https://device-farm.com/llms-full.txt">llms-full.txt</a> | <a href="README.zh.md">中文版本</a></p>
 
 FIRERPA 是面向 Android 的**一体化设备控制平台**。服务端直接在设备上运行，**无需额外运行时依赖**；**适配多代 Android 系统**，**无论是否 Root 均可使用**。PC 端通过 Python 客户端库统一调度，将 UI 自动化、远程运维、流量截获、Hook 逆向、网络代理、分布式组网、AI Agent / **MCP** 等能力收敛到同一套服务与 API 中。相比把 Appium、mitmproxy、frida-server、adb、uiautomator2 等自研脚本和各类运维工具拼凑使用，FIRERPA 的优势在于：**能力同源、配置统一、链路打通、适合多设备长期运行与工程化管理**。
 
