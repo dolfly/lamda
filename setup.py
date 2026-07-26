@@ -19,9 +19,9 @@ setuptools.setup(
         ],
     },
     install_requires= [
-        "grpcio-tools>=1.35.0,<=1.74.0",
+        "grpcio-tools>=1.35.0,<=1.82.0",
         "grpc-interceptor>=0.13.0,<=0.15.4",
-        "grpcio>=1.35.0,<=1.74.0",
+        "grpcio>=1.35.0,<=1.82.0",
         "cryptography>=35.0.0",
         "msgpack>=1.0.0",
         "asn1crypto>=1.0.0,<2",

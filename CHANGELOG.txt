@@ -1,5 +1,14 @@
 CHANGELOG
 
+Version 10.2
+-----------
+
+* Added support for Android 17
+* Added support for Android 16KB page size
+* Upgraded runtime core to Python 3.12
+* Added APK/XAPK installation API
+* Fixed various issues
+
 Version 10.0
 -----------
 

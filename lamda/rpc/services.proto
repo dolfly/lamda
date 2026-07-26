@@ -38,7 +38,6 @@ service Application {
     rpc startApplication(ApplicationRequest) returns (Boolean) {}
     rpc stopApplication(ApplicationRequest) returns (Boolean) {}
     rpc uninstallApplication(ApplicationRequest) returns (Boolean) {}
-    rpc installFromLocalFile(ApplicationRequest) returns (ApplicationInfo) {}
     rpc enableApplication(ApplicationRequest) returns (Boolean) {}
     rpc disableApplication(ApplicationRequest) returns (Boolean) {}
     rpc grantPermission(ApplicationRequest) returns (Boolean) {}
@@ -53,6 +52,12 @@ service Application {
     rpc isScriptAttached(HookRequest) returns (Boolean) {}
     rpc attachScript(HookRequest) returns (Boolean) {}
     rpc detachScript(HookRequest) returns (Boolean) {}
+
+    rpc installSessionCreate(InstallSessionCreateRequest) returns (InstallSessionCreateResponse) {}
+    rpc installSessionWrite(InstallSessionWriteRequest) returns (InstallSessionWriteResponse) {}
+    rpc installSessionCommit(InstallSessionCommitRequest) returns (InstallSessionStatusResponse) {}
+    rpc installSessionQuery(InstallSessionQueryRequest) returns (InstallSessionStatusResponse) {}
+    rpc installSessionAbandon(InstallSessionAbandonRequest) returns (Boolean) {}
 }
 
 service Debug {

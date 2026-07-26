@@ -128,3 +128,63 @@ message HookRpcResponse {
         string package          = 1;
         string callresult       = 2;
 }
+
+message InstallSessionCreateRequest {
+        uint32 user             = 1;
+        string installerPackageName = 2;
+        uint64 sizeBytes        = 4;
+        string package          = 5;
+        bool dontKillApp        = 14;
+        bool replaceExisting    = 15;
+        bool allowTest          = 16;
+        bool requestDowngrade   = 17;
+        bool grantRuntimePermissions=18;
+}
+
+message InstallSessionWriteRequest {
+        int32 session           = 1;
+        string path             = 2;
+        string name             = 3;
+        bool delete             = 10;
+}
+
+message InstallSessionAbandonRequest {
+        int32 session           = 1;
+}
+
+message InstallSessionQueryRequest {
+        int32 session           = 1;
+}
+
+message InstallSessionCommitRequest {
+        int32 session           = 1;
+        bool wait               = 2;
+        uint64 timeout          = 3;
+}
+
+
+message InstallSessionCreateResponse {
+        uint32 user             = 1;
+        int32 session           = 2;
+}
+
+message InstallSessionWriteResponse {
+        int32 session           = 1;
+        string name             = 2;
+        uint64 writtenBytes     = 3;
+        uint64 totalBytes       = 4;
+}
+
+message InstallSessionStatusResponse {
+        uint32 user             = 1;
+        int32 session           = 2;
+        string package          = 3;
+        int32 status            = 4;
+        int32 legacyStatus      = 5;
+        string statusMessage    = 6;
+        bool finished           = 7;
+        bool committed          = 8;
+        bool abandoned          = 9;
+        float progress          = 10;
+        bool success            = 11;
+}

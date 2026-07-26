@@ -11,6 +11,7 @@ import time
 import uuid
 import json
 import base64
+import posixpath
 import hashlib
 import platform
 import warnings
@@ -1183,10 +1184,6 @@ class VirtualDisplayStub(UiAutomatorStub):
     def disable_global_method_warning(self):
         self._warning_global = False
     # Application compat
-    def install_local_file(self, rpath, user=0):
-        self._warning_global_use("install_local_file")
-        return self.device.proxy("Application", display=self.display).install_local_file(
-                                                                        rpath, user=user)
     def enumerate_installed_apps(self, user=0):
         self._warning_global_use("enumerate_installed_apps")
         return self.device.proxy("Application", display=self.display).enumerate_installed_apps(user=user)
@@ -1481,10 +1478,41 @@ class ApplicationOpStub:
                                             name)
 
 
+class ApplicationInstallSession(object):
+    def __init__(self, device, session, tmpdir=None):
+        self.tmpdir  = tmpdir or "/data/local/tmp"
+        self.stub    = device.proxy("Application").stub
+        self.device  = device
+        self.session = session
+    def _write(self, path, name=None, delete=False):
+        req = protos.InstallSessionWriteRequest(session=self.session,
+                                                path=path, name=name,
+                                                delete=delete)
+        return self.stub.installSessionWrite(req)
+    def write(self, path, name=None):
+        suffix = uuid.uuid4().hex[::4]
+        dest = posixpath.join(self.tmpdir, "{}_{}.apk".format(
+                                         self.session, suffix))
+        info = self.device.upload_file(path, dest)
+        self.device.file_chmod(info.path, mode=0o777)
+        return self._write(info.path, name, True)
+    def commit(self, wait=True, timeout=0):
+        req = protos.InstallSessionCommitRequest(session=self.session,
+                                                 wait=wait, timeout=timeout)
+        return self.stub.installSessionCommit(req)
+    def abandon(self):
+        req = protos.InstallSessionAbandonRequest(session=self.session)
+        return self.stub.installSessionAbandon(req).value
+    def status(self):
+        req = protos.InstallSessionQueryRequest(session=self.session)
+        return self.stub.installSessionQuery(req)
+
+
 class ApplicationStub(BaseServiceStub):
-    def __init__(self, *args, display=0, **kwargs):
+    def __init__(self, *args, display=0, device=None, **kwargs):
         super(ApplicationStub, self).__init__(*args, **kwargs)
         self.display = display
+        self.device  = device
     def current_application(self):
         """
         Get the current foreground app info.
@@ -1523,14 +1551,23 @@ class ApplicationStub(BaseServiceStub):
         req.display = self.display
         r = self.stub.startActivity(req)
         return r.value
-    def install_local_file(self, fpath, user=0):
-        """
-        Install an APK from a device path.
-        """
-        req = protos.ApplicationRequest(path=fpath)
-        req.user = user
-        r = self.stub.installFromLocalFile(req)
-        return r
+    def _create_install_session(self, user=0, size_bytes=0, package=None,
+                               installer_package_name=None, dont_kill_app=False,
+        replace_existing=True, allow_test=False, request_downgrade=False,
+        grant_runtime_permissions=False, tmpdir=None):
+        req = protos.InstallSessionCreateRequest(user=user)
+        req.sizeBytes = size_bytes
+        req.dontKillApp = dont_kill_app
+        req.requestDowngrade = request_downgrade
+        req.grantRuntimePermissions = grant_runtime_permissions
+        req.replaceExisting = replace_existing
+        req.allowTest = allow_test
+        req.installerPackageName = installer_package_name or ""
+        req.package = package or ""
+        info = self.stub.installSessionCreate(req)
+        params = dict(device=self.device, session=info.session,
+                                               tmpdir=tmpdir)
+        return ApplicationInstallSession(**params)
     def __call__(self, applicationId, user=0):
         return ApplicationOpStub(self.stub, applicationId,
                                     user=user, display=self.display)
@@ -2444,8 +2481,22 @@ class Device(object):
     def file_stat(self, fpath):
         return self.stub("File").file_stat(fpath)
     # Shortcut: Application
-    def install_local_file(self, rpath, user=0):
-        return self.stub("Application").install_local_file(rpath, user=user)
+    def create_install_session(self, user=0, size_bytes=0, package=None,
+                               installer_package_name=None, dont_kill_app=False,
+        replace_existing=True, allow_test=False, request_downgrade=False,
+        grant_runtime_permissions=False, tmpdir=None):
+        kwargs = dict(user=user)
+        kwargs["size_bytes"] = size_bytes
+        kwargs["package"] = package
+        kwargs["request_downgrade"] = request_downgrade
+        kwargs["grant_runtime_permissions"] = grant_runtime_permissions
+        kwargs["installer_package_name"] = installer_package_name
+        kwargs["dont_kill_app"] = dont_kill_app
+        kwargs["replace_existing"] = replace_existing
+        kwargs["allow_test"] = allow_test
+        kwargs["tmpdir"] = tmpdir
+        proxy = self.proxy("Application", device=self)
+        return proxy._create_install_session(**kwargs)
     def current_application(self):
         return self.stub("Application").current_application()
     def enumerate_installed_apps(self, user=0):

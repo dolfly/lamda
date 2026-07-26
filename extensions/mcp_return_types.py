@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.9
+#!/usr/bin/env python3
 # Copyright 2025 rev1si0n (lamda.devel@gmail.com). All rights reserved.
 #
 # Distributed under MIT license.
