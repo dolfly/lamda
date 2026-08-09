@@ -299,8 +299,9 @@ def to_dict(prot):
 
 def Selector(**kwargs):
     """ Selector wrapper """
-    kwargs.pop("fields", None)
-    sel = _Selector(**kwargs, fields=kwargs.keys())
+    fields = set(kwargs.pop("fields", []))
+    fields.update(kwargs.keys())
+    sel = _Selector(**kwargs, fields=fields)
     return sel
 
 
@@ -502,14 +503,14 @@ class ObjectUiAutomatorOpStub:
         """
         selector = self.selector.child(**selector)
         s = MessageToDict(selector, preserving_proto_field_name=True)
-        return self.__class__(self.caller, s)
+        return self.__class__(self.caller, s, self.display)
     def sibling(self, **selector):
         """
         Match sibling nodes of the selector.
         """
         selector = self.selector.sibling(**selector)
         s = MessageToDict(selector, preserving_proto_field_name=True)
-        return self.__class__(self.caller, s)
+        return self.__class__(self.caller, s, self.display)
     def take_screenshot(self, quality=100):
         """
         Screenshot the selected element.
@@ -589,73 +590,78 @@ class ObjectUiAutomatorOpStub:
         req = protos.SelectorOnlyRequest(display=self.display,
                                          selector=self.selector)
         return self.stub.selectorObjInfo(req)
-    def _new_object(self, **kwargs):
+    def _chain(self, **kwargs):
         selector = copy.deepcopy(self._selector)
         child_sibling = selector.get("childOrSiblingSelector")
         target = child_sibling[-1] if child_sibling else selector
         target.update(**kwargs)
+        fields = set(target.pop("fields", []))
+        fields.update(target.keys())
+        target["fields"] = fields
         return self.caller(**selector)
     def text(self, txt):
-        return self._new_object(text=txt)
+        return self._chain(text=txt)
     def resourceId(self, name):
-        return self._new_object(resourceId=name)
+        return self._chain(resourceId=name)
     def description(self, desc):
-        return self._new_object(description=desc)
+        return self._chain(description=desc)
     def packageName(self, name):
-        return self._new_object(packageName=name)
+        return self._chain(packageName=name)
     def className(self, name):
-        return self._new_object(className=name)
+        return self._chain(className=name)
     def textContains(self, needle):
-        return self._new_object(textContains=needle)
+        return self._chain(textContains=needle)
     def descriptionContains(self, needle):
-        return self._new_object(descriptionContains=needle)
+        return self._chain(descriptionContains=needle)
     def textStartsWith(self, needle):
-        return self._new_object(textStartsWith=needle)
+        return self._chain(textStartsWith=needle)
     def descriptionStartsWith(self, needle):
-        return self._new_object(descriptionStartsWith=needle)
+        return self._chain(descriptionStartsWith=needle)
     def textMatches(self, match):
-        return self._new_object(textMatches=match)
+        return self._chain(textMatches=match)
     def descriptionMatches(self, match):
-        return self._new_object(descriptionMatches=match)
+        return self._chain(descriptionMatches=match)
     def resourceIdMatches(self, match):
-        return self._new_object(resourceIdMatches=match)
+        return self._chain(resourceIdMatches=match)
     def packageNameMatches(self, match):
-        return self._new_object(packageNameMatches=match)
+        return self._chain(packageNameMatches=match)
     def classNameMatches(self, match):
-        return self._new_object(classNameMatches=match)
+        return self._chain(classNameMatches=match)
     def checkable(self, value):
-        return self._new_object(checkable=value)
+        return self._chain(checkable=value)
     def clickable(self, value):
-        return self._new_object(clickable=value)
+        return self._chain(clickable=value)
     def focusable(self, value):
-        return self._new_object(focusable=value)
+        return self._chain(focusable=value)
     def scrollable(self, value):
-        return self._new_object(scrollable=value)
+        return self._chain(scrollable=value)
     def longClickable(self, value):
-        return self._new_object(longClickable=value)
+        return self._chain(longClickable=value)
     def enabled(self, value):
-        return self._new_object(enabled=value)
+        return self._chain(enabled=value)
     def checked(self, value):
-        return self._new_object(checked=value)
+        return self._chain(checked=value)
     def focused(self, value):
-        return self._new_object(focused=value)
+        return self._chain(focused=value)
     def selected(self, value):
-        return self._new_object(selected=value)
-    def index(self, idx):
-        return self._new_object(index=idx)
+        return self._chain(selected=value)
+    def resultIndex(self, idx):
+        return self._chain(resultIndex=idx)
     def instance(self, idx):
-        return self._new_object(instance=idx)
-    def get(self, idx):
-        """
-        Get the nth matched element.
-        """
-        return self.instance(idx)
+        return self._chain(instance=idx)
+    def index(self, idx):
+        return self._chain(index=idx)
     def __iter__(self):
         """
         Iterate over all elements matching the selector.
         """
-        yield from [self.instance(i) for i in \
+        yield from [self.resultIndex(i) for i in \
                             range(self.count())]
+    def get(self, idx):
+        """
+        Get the Nth matching result of the selector.
+        """
+        return self.resultIndex(idx)
     def count(self):
         """
         Get the number of selected widgets.

@@ -440,6 +440,7 @@ message Selector {
         uint32 instance                 = 26;
         repeated string childOrSibling  = 27;
         repeated Selector childOrSiblingSelector  = 28;
+        uint32 resultIndex              = 49;
         repeated string fields          = 50;
 }
 

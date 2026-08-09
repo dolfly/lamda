@@ -13,7 +13,7 @@ setuptools.setup(
     python_requires = ">=3.6,<=3.14",
     zip_safe        = False,
     extras_require  = {
-        "full": ["frida>=17.0.0,<18.0.0"],
+        "full": ["frida>=17.0.0,<18.0.0,!=17.16.*"],
         ":sys_platform == \"win32\"": [
             "pyreadline==2.1",
         ],

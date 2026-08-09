@@ -1,5 +1,14 @@
 CHANGELOG
 
+Version 10.4
+-----------
+
+* Built-in environment now includes the adb command
+* Added sqlalchemy and paramiko
+* Human-friendly query semantics for child, sibling, and index access
+* Added fuser, killall, pstree, and run-parts commands
+* Other minor bug fixes
+
 Version 10.2
 -----------
 
