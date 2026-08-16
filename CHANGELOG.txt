@@ -1,5 +1,14 @@
 CHANGELOG
 
+Version 10.6
+-----------
+
+* Upgrade openssl, openssh, etc.
+* Upgrade pyopenssl, cryptography, crypto, etc.
+* Fix the issue of command execution failure on Debian
+* Add built-in mitmproxy library
+* Reduce binary size
+
 Version 10.4
 -----------
 
