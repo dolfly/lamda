@@ -1546,6 +1546,13 @@ class ApplicationStub(BaseServiceStub):
         req = protos.Integer(value=user)
         r = self.stub.enumerateInstalledApps(req)
         return r.applications
+    def _update_extras(self, msg, data):
+        types = {bool: "bool_value", int: "int64_value",
+                                                float: "double_value",
+                                                str: "string_value",
+                                                type(None): "null_value"}
+        for k, v in data.items(): setattr(msg.fields[k], types[type(v)],
+                                                0 if v is None else v)
     def start_activity(self, **activity):
         """
         Start an activity (always returns True).
@@ -1553,7 +1560,7 @@ class ApplicationStub(BaseServiceStub):
         activity.setdefault("extras", {})
         extras = activity.pop("extras")
         req = protos.ApplicationActivityRequest(**activity)
-        req.extras.update(extras)
+        self._update_extras(req.extras, extras)
         req.display = self.display
         r = self.stub.startActivity(req)
         return r.value

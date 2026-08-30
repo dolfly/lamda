@@ -1,5 +1,13 @@
 CHANGELOG
 
+Version 10.8
+-----------
+
+* Fixed int64 parameter issue in start_activity
+* Added support libraries for OpenAI, Anthropic, Ollama models, boto3, etc.
+* Temporary multi-version compatibility fix for frida-server
+* Reduced memory usage
+
 Version 10.6
 -----------
 
